@@ -32,7 +32,9 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#ifndef __SWITCH__
 #include <sys/wait.h>
+#endif
 #include <unistd.h>
 #include <fcntl.h>
 #endif
@@ -334,7 +336,11 @@ bool PathExists(const std::string &path)
 
 bool IsPathAbsolute(const std::string &path)
 {
+#ifdef __SWITCH__
+	return path[0] == '/' || path.find("sdmc:/") == 0;
+#else
 	return path[0] == '/';
+#endif
 }
 
 bool IsDir(const std::string &path)
@@ -369,6 +375,35 @@ bool RecursiveDelete(const std::string &path)
 	if (!PathExists(path))
 		return true;
 
+#ifdef __SWITCH__
+	bool is_file = !IsDir(path);
+	infostream << "Recursively deleting " << (is_file ? "file" : "directory")
+		<< " \"" << path << "\"" << std::endl;
+	if (is_file) {
+		if (unlink(path.c_str()) != 0) {
+			errorstream << "RecursiveDelete: Failed to delete file \""
+				<< path << "\": " << LAST_OS_ERROR() << std::endl;
+			return false;
+		}
+		return true;
+	}
+
+	std::vector<DirListNode> content = GetDirListing(path);
+	for (const auto &n : content) {
+		std::string fullpath = path + DIR_DELIM + n.name;
+		if (!RecursiveDelete(fullpath)) {
+			errorstream << "RecursiveDelete: Failed to recurse to \""
+				<< fullpath << "\"" << std::endl;
+			return false;
+		}
+	}
+	if (rmdir(path.c_str()) != 0) {
+		errorstream << "RecursiveDelete: Failed to delete directory \""
+			<< path << "\": " << LAST_OS_ERROR() << std::endl;
+		return false;
+	}
+	return true;
+#else
 	// Execute the 'rm' command directly, by fork() and execve()
 
 	infostream << "Removing \"" << path << "\"" << std::endl;
@@ -404,6 +439,7 @@ bool RecursiveDelete(const std::string &path)
 		while (tpid != child_pid);
 		return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 	}
+#endif
 }
 
 bool DeleteSingleFileOrEmptyDirectory(const std::string &path, bool log_error)
@@ -885,6 +921,10 @@ bool safeWriteToFile(const std::string &path, std::string_view content)
 	// Create it in the same directory
 	std::string tmp_file;
 	if (auto dir = RemoveLastPathComponent(path); !dir.empty()) {
+		if (!PathExists(dir) && !CreateAllDirs(dir)) {
+			errorstream << "Failed to create directory \"" << dir << "\"" << std::endl;
+			return false;
+		}
 		tmp_file = dir + DIR_DELIM;
 	}
 	tmp_file += ".~mt" + get_unique();
@@ -962,8 +1002,31 @@ bool safeWriteToFile(const std::string &path, std::string_view content)
 	// On POSIX compliant systems rename() is specified to be able to swap the
 	// file in place of the destination file, making this a truly error-proof
 	// transaction.
-	if (rename(tmp_file.c_str(), path.c_str()) != 0)
+	if (rename(tmp_file.c_str(), path.c_str()) != 0) {
+#if defined(__SWITCH__)
+		int first_rename_errno = errno;
+		if (first_rename_errno == EEXIST) {
+			// libnx/newlib does not replace an existing sdmc file with rename().
+			// Keep a backup so a failed second rename can restore the old config.
+			std::string backup_file = path + ".~mtbak" + get_unique();
+			if (rename(path.c_str(), backup_file.c_str()) != 0) {
+				rename_error = LAST_OS_ERROR();
+			} else if (rename(tmp_file.c_str(), path.c_str()) != 0) {
+				rename_error = LAST_OS_ERROR();
+				if (rename(backup_file.c_str(), path.c_str()) != 0) {
+					errorstream << "Failed to restore \"" << path << "\": "
+							<< LAST_OS_ERROR() << std::endl;
+				}
+			} else {
+				remove(backup_file.c_str());
+			}
+		} else {
+			rename_error = strerror(first_rename_errno);
+		}
+#else
 		rename_error = LAST_OS_ERROR();
+#endif
+	}
 #endif
 
 	if (!rename_error.empty()) {

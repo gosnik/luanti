@@ -24,8 +24,10 @@
 #endif
 #if !defined(_WIN32)
 	#include <unistd.h>
-	#include <sys/utsname.h>
-	#if !defined(__ANDROID__)
+	#if !defined(__SWITCH__)
+		#include <sys/utsname.h>
+	#endif
+	#if !defined(__ANDROID__) && !defined(__SWITCH__)
 		#include <spawn.h>
 	#endif
 #endif
@@ -36,6 +38,9 @@
 #if defined(__ANDROID__)
 	#include "porting_android.h"
 	#include <android/api-level.h>
+#endif
+#if defined(__SWITCH__)
+	#include <switch.h>
 #endif
 #if defined(__APPLE__)
 	#include <mach-o/dyld.h>
@@ -158,6 +163,7 @@ void signal_handler_init(void)
        Environment variables
 */
 
+#ifndef __SWITCH__
 static std::optional<std::string> getUserPathEnvVar()
 {
 	if (const char *user_path = getenv("LUANTI_USER_PATH");
@@ -172,6 +178,7 @@ static std::optional<std::string> getUserPathEnvVar()
 	}
 	return std::nullopt;
 }
+#endif
 
 /*
 	Path mangler
@@ -270,6 +277,8 @@ static std::string detectSystemInfo()
 
 	oss << "Android/" << api << " " << osinfo.machine;
 	return oss.str();
+#elif defined(__SWITCH__)
+	return "Nintendo Switch/Horizon aarch64";
 #else /* POSIX */
 	struct utsname osinfo;
 	uname(&osinfo);
@@ -297,6 +306,8 @@ u32 getMemorySizeMB()
 	status.dwLength = sizeof(status);
 	if (GlobalMemoryStatusEx(&status))
 		return status.ullTotalPhys >> 20;
+#elif defined(__SWITCH__)
+	return 4096;
 #elif defined(__unix__) && defined(_SC_PHYS_PAGES) && defined(_SC_PAGE_SIZE)
 	long pages = sysconf(_SC_PHYS_PAGES);
 	long page_size = sysconf(_SC_PAGE_SIZE);
@@ -399,6 +410,13 @@ bool getCurrentExecPath(char *buf, size_t len)
 		return false;
 
 	return true;
+}
+
+#elif defined(__SWITCH__)
+
+bool getCurrentExecPath(char *buf, size_t len)
+{
+	return strlcpy(buf, "sdmc:/switch/luanti/luanti.nro", len) < len;
 }
 
 #elif defined(__HAIKU__)
@@ -513,6 +531,12 @@ bool setSystemPaths()
 #elif defined(__ANDROID__)
 
 extern bool setSystemPaths(); // defined in porting_android.cpp
+
+//// Nintendo Switch
+
+#elif defined(__SWITCH__)
+
+extern bool setSystemPaths(); // defined in porting_switch.cpp
 
 
 //// Linux
@@ -659,6 +683,13 @@ static void createCacheDirTag()
 
 void initializePaths()
 {
+#if defined(__SWITCH__)
+	infostream << "Using Nintendo Switch homebrew paths" << std::endl;
+	if (!setSystemPaths())
+		FATAL_ERROR("Failed to initialize Nintendo Switch paths");
+	path_cache = path_user + DIR_DELIM "cache";
+
+#else
 #if RUN_IN_PLACE
 	infostream << "Using relative paths (RUN_IN_PLACE)" << std::endl;
 
@@ -735,6 +766,7 @@ void initializePaths()
 	migrateCachePath();
 
 #endif // RUN_IN_PLACE
+#endif // __SWITCH__
 
 	assert(!path_share.empty());
 	assert(!path_user.empty());
@@ -785,6 +817,14 @@ bool secure_rand_fill_buf(void *buf, size_t len)
 	return success;
 }
 
+#elif defined(__SWITCH__)
+
+bool secure_rand_fill_buf(void *buf, size_t len)
+{
+	randomGet(buf, len);
+	return true;
+}
+
 #else
 
 bool secure_rand_fill_buf(void *buf, size_t len)
@@ -806,7 +846,7 @@ bool secure_rand_fill_buf(void *buf, size_t len)
 
 #endif
 
-#ifndef __ANDROID__
+#if !defined(__ANDROID__) && !defined(__SWITCH__)
 
 void osSpecificInit()
 {
@@ -923,6 +963,10 @@ static bool open_uri(const std::string &uri)
 #elif defined(__ANDROID__)
 	openURIAndroid(uri.c_str());
 	return true;
+#elif defined(__SWITCH__)
+	errorstream << "Opening URIs is not supported on Nintendo Switch: "
+		<< uri << std::endl;
+	return false;
 #elif defined(__APPLE__)
 	const char *argv[] = {"open", uri.c_str(), NULL};
 	return posix_spawnp(NULL, "open", NULL, NULL, (char**)argv,

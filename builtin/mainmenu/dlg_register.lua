@@ -42,6 +42,23 @@ end
 
 --------------------------------------------------------------------------------
 local function register_buttonhandler(this, fields)
+	local function strip_line_endings(value)
+		if value == nil then
+			return nil
+		end
+		return value:gsub("[\r\n]+$", "")
+	end
+
+	if fields.name then
+		fields.name = strip_line_endings(fields.name)
+	end
+	if fields.password then
+		fields.password = strip_line_endings(fields.password)
+	end
+	if fields.password_2 then
+		fields.password_2 = strip_line_endings(fields.password_2)
+	end
+
 	this.data.name = fields.name
 	this.data.error = nil
 
@@ -55,6 +72,7 @@ local function register_buttonhandler(this, fields)
 			return true
 		end
 
+		fields.name = fields.name:trim()
 		gamedata.playername = fields.name
 		gamedata.password   = fields.password
 		gamedata.address    = this.data.address
@@ -82,6 +100,13 @@ local function register_buttonhandler(this, fields)
 		core.settings:set("name", fields.name)
 		core.settings:set("address",     gamedata.address)
 		core.settings:set("remote_port", gamedata.port)
+		if lockdown_info.enabled then
+			core.settings:set("lockdown_playername", fields.name)
+			core.settings:set("lockdown_password", fields.password)
+			if not core.save_lockdown_credentials(fields.name, fields.password) then
+				core.log("error", "Failed to save lockdown credentials")
+			end
+		end
 
 		core.start()
 	end
@@ -106,6 +131,7 @@ function create_register_dialog(address, port, server)
 	retval.data.address = address
 	retval.data.port = port
 	retval.data.server = server
-	retval.data.name = core.settings:get("name") or ""
+	retval.data.name = core.settings:get("lockdown_playername") or
+		core.settings:get("name") or ""
 	return retval
 end

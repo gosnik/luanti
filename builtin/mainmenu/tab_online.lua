@@ -54,6 +54,66 @@ local function is_selected_fav(server)
 	return false
 end
 
+local function get_lockdown_server()
+	return {
+		name = lockdown_info.server_name,
+		address = lockdown_info.server_name,
+		port = lockdown_info.server_port,
+		description = fgettext("Private server"),
+	}
+end
+
+local function set_lockdown_server()
+	core.settings:set("address", lockdown_info.server_name)
+	core.settings:set("remote_port", lockdown_info.server_port)
+end
+
+local function strip_line_endings(value)
+	if value == nil then
+		return nil
+	end
+	return value:gsub("[\r\n]+$", "")
+end
+
+local function normalize_lockdown_name(value)
+	if value == nil then
+		return ""
+	end
+	return value:trim()
+end
+
+local function get_lockdown_playername()
+	local playername = core.settings:get("lockdown_playername")
+	if playername == nil or playername == "" then
+		playername = core.settings:get("name") or ""
+	end
+	return normalize_lockdown_name(playername)
+end
+
+local function get_lockdown_password(fields)
+	local saved_password = core.settings:get("lockdown_password") or ""
+	if fields.te_pwd ~= nil then
+		local password = strip_line_endings(fields.te_pwd)
+		core.settings:set("lockdown_password", password)
+		return password
+	end
+	return saved_password
+end
+
+local function save_lockdown_credentials(playername, password)
+	playername = normalize_lockdown_name(playername)
+	core.log("action", "lockdown credentials save requested for '" ..
+		playername .. "' password=" .. (password ~= "" and "set" or "empty"))
+	core.settings:set("name", playername)
+	core.settings:set("lockdown_playername", playername)
+	core.settings:set("lockdown_password", password)
+	local saved = core.save_lockdown_credentials(playername, password)
+	if not saved then
+		core.log("error", "Failed to save lockdown credentials")
+	end
+	return saved
+end
+
 -- Persists the selected server in the "address" and "remote_port" settings
 
 local function set_selected_server(server)
@@ -91,6 +151,36 @@ local function get_formspec(tabview, name, tabdata)
 	-- Update the cached supported proto info,
 	-- it may have changed after a change by the settings menu.
 	common_update_cached_supp_proto()
+
+	if lockdown_info.enabled then
+		set_lockdown_server()
+		local server_label = fgettext("Server") .. ": " ..
+				core.formspec_escape(lockdown_info.server_name)
+		if lockdown_info.server_port ~= 30000 then
+			server_label = server_label .. ":" .. tostring(lockdown_info.server_port)
+		end
+
+		local retval =
+			"container[4.875,0.35]" ..
+			"box[0,0;5.75,6.4;#666666]" ..
+			"style[te_name,te_pwd;textcolor=#000000]" ..
+			"set_focus[te_name;true]" ..
+			"label[0.25,0.45;" .. server_label .. "]" ..
+			"label[0.25,1.6;" .. fgettext("Name") .. "]" ..
+			"field[0.25,1.85;5.25,0.75;te_name;;" ..
+				core.formspec_escape(get_lockdown_playername()) .. "]" ..
+			"label[0.25,2.85;" .. fgettext("Password") .. "]" ..
+			"pwdfield[0.25,3.1;5.25,0.75;te_pwd;]"
+
+		if core.settings:get_bool("enable_split_login_register") then
+			retval = retval .. "button[0.25,5;2.5,0.75;btn_mp_register;" ..
+				fgettext("Register") .. "]"
+		end
+		retval = retval .. "button[3,5;2.5,0.75;btn_mp_login;" ..
+			fgettext("Login") .. "]" ..
+			"container_end[]"
+		return retval
+	end
 
 	if not tabdata.search_for then
 		tabdata.search_for = ""
@@ -499,8 +589,54 @@ end
 
 local function main_button_handler(tabview, fields, name, tabdata)
 	if fields.te_name then
+		fields.te_name = normalize_lockdown_name(fields.te_name)
 		gamedata.playername = fields.te_name
 		core.settings:set("name", fields.te_name)
+		if lockdown_info.enabled then
+			core.settings:set("lockdown_playername", fields.te_name)
+		end
+	end
+
+	if lockdown_info.enabled then
+		set_lockdown_server()
+		if fields.btn_mp_register then
+			local dlg = create_register_dialog(
+				lockdown_info.server_name,
+				lockdown_info.server_port,
+				get_lockdown_server())
+			dlg:set_parent(tabview)
+			tabview:hide()
+			dlg:show()
+			return true
+		end
+
+		if fields.btn_mp_login or fields.key_enter then
+			local playername = normalize_lockdown_name(fields.te_name or
+				get_lockdown_playername())
+			local password = get_lockdown_password(fields)
+
+			if not core.is_valid_player_name(playername) then
+				gamedata.errormessage = fgettext_ne("Player name contains disallowed characters")
+				return true
+			end
+
+			gamedata.playername = playername
+			gamedata.password   = password
+			gamedata.address    = lockdown_info.server_name
+			gamedata.port       = lockdown_info.server_port
+			save_lockdown_credentials(playername, password)
+
+			local enable_split_login_register = core.settings:get_bool("enable_split_login_register")
+			gamedata.allow_login_or_register = enable_split_login_register and "login" or "any"
+			gamedata.selected_world = 0
+			gamedata.servername = lockdown_info.server_name
+			gamedata.serverdescription = fgettext("Private server")
+
+			core.start()
+			return true
+		end
+
+		return false
 	end
 
 	if fields.servers then
@@ -666,7 +802,11 @@ end
 local function on_change(type)
 	if type == "ENTER" then
 		mm_game_theme.set_engine()
-		serverlistmgr.sync()
+		if lockdown_info.enabled then
+			set_lockdown_server()
+		else
+			serverlistmgr.sync()
+		end
 	end
 end
 

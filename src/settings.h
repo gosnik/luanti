@@ -130,6 +130,9 @@ public:
 	bool readConfigFile(const char *filename);
 	//Updates configuration file.  Returns success.
 	bool updateConfigFile(const char *filename);
+	// Updates or appends only the supplied top-level scalar values.
+	bool updateConfigFileValues(const char *filename,
+		const std::map<std::string, std::string> &values);
 	// NOTE: Types of allowed_options are ignored.  Returns success.
 	bool parseCommandLine(int argc, char *argv[],
 			const std::map<std::string, ValueSpec> &allowed_options);

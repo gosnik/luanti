@@ -72,6 +72,12 @@ bool FileCache::load(const std::string &name, std::ostream &os)
 	return loadByPath(path, os);
 }
 
+bool FileCache::load(const std::string &name, std::string &data)
+{
+	std::string path = m_dir + DIR_DELIM + name;
+	return fs::ReadFile(path, data);
+}
+
 bool FileCache::exists(const std::string &name)
 {
 	std::string path = m_dir + DIR_DELIM + name;

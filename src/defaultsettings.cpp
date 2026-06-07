@@ -20,7 +20,7 @@
  */
 static bool detect_touch()
 {
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__SWITCH__)
 	return true;
 #elif defined(__linux__)
 	std::string chassis_type;
@@ -83,6 +83,8 @@ void set_default_settings()
 	// Client
 	settings->setDefault("address", "");
 	settings->setDefault("remote_port", "30000");
+	settings->setDefault("lockdown_playername", "");
+	settings->setDefault("lockdown_password", "");
 #if defined(__unix__) && !defined(__APPLE__) && !defined (__ANDROID__)
 	// On Linux+X11 (not Linux+Wayland or Linux+XWayland), I've encountered a bug
 	// where fake mouse events were generated from touch events if in relative
@@ -113,7 +115,11 @@ void set_default_settings()
 	settings->setDefault("screenshot_format", "png");
 	settings->setDefault("screenshot_quality", "0");
 	settings->setDefault("client_unload_unused_data_timeout", "600");
+#if defined(__SWITCH__)
+	settings->setDefault("client_mapblock_limit", "2500");
+#else
 	settings->setDefault("client_mapblock_limit", "7500"); // about 120 MB
+#endif
 	settings->setDefault("enable_build_where_you_stand", "false");
 	settings->setDefault("curl_timeout", "20000");
 	settings->setDefault("secure.curl_proxy", "");
@@ -251,6 +257,16 @@ void set_default_settings()
 	settings->setDefault("tooltip_append_itemname", "false");
 	settings->setDefault("fps_max", "60");
 	settings->setDefault("fps_max_unfocused", "10");
+#if defined(__SWITCH__)
+	settings->setDefault("viewing_range", "80");
+	settings->setDefault("client_mesh_chunk", "1");
+	settings->setDefault("screen_w", "1280");
+	settings->setDefault("screen_h", "720");
+	settings->setDefault("window_maximized", "false");
+	settings->setDefault("autosave_screensize", "false");
+	settings->setDefault("fullscreen", "true");
+	settings->setDefault("vsync", "true");
+#else
 	settings->setDefault("viewing_range", "190");
 	settings->setDefault("client_mesh_chunk", "1");
 	settings->setDefault("screen_w", "1024");
@@ -259,6 +275,7 @@ void set_default_settings()
 	settings->setDefault("autosave_screensize", "true");
 	settings->setDefault("fullscreen", bool_to_cstr(has_touch));
 	settings->setDefault("vsync", "false");
+#endif
 	settings->setDefault("fov", "72");
 	settings->setDefault("leaves_style", "fancy");
 	settings->setDefault("connected_glass", "false");
@@ -295,8 +312,13 @@ void set_default_settings()
 	settings->setDefault("crosshair_color", "(255,255,255)");
 	settings->setDefault("crosshair_alpha", "255");
 	settings->setDefault("recent_chat_messages", "6");
+#if defined(__SWITCH__)
+	settings->setDefault("hud_scaling", "1.35");
+	settings->setDefault("gui_scaling", "1.35");
+#else
 	settings->setDefault("hud_scaling", "1.0");
 	settings->setDefault("gui_scaling", "1.0");
+#endif
 	settings->setDefault("gui_scaling_filter", "false");
 	settings->setDefault("smooth_scrolling", "true");
 	settings->setDefault("hud_hotbar_max_width", "1.0");
@@ -310,12 +332,20 @@ void set_default_settings()
 	settings->setDefault("transparency_sorting_group_by_buffers", "true");
 	settings->setDefault("transparency_sorting_distance", "16");
 
+#if defined(__SWITCH__)
+	settings->setDefault("enable_minimap", "false");
+#else
 	settings->setDefault("enable_minimap", "true");
+#endif
 	settings->setDefault("minimap_shape_round", "true");
 	settings->setDefault("minimap_double_scan_height", "true");
 
 	// Effects
+#if defined(__SWITCH__)
+	settings->setDefault("enable_post_processing", "false");
+#else
 	settings->setDefault("enable_post_processing", "true");
+#endif
 	settings->setDefault("post_processing_texture_bits", "10");
 	settings->setDefault("directional_colored_fog", "true");
 	settings->setDefault("inventory_items_animations", "false");
@@ -381,9 +411,17 @@ void set_default_settings()
 	settings->setDefault("autojump", bool_to_cstr(has_touch));
 	settings->setDefault("enable_esc_dialog", "true");
 	settings->setDefault("continuous_forward", "false");
+#if defined(__SWITCH__)
+	settings->setDefault("enable_joysticks", "true");
+#else
 	settings->setDefault("enable_joysticks", "false");
+#endif
 	settings->setDefault("joystick_id", "0");
+#if defined(__SWITCH__)
+	settings->setDefault("joystick_type", "switch");
+#else
 	settings->setDefault("joystick_type", "auto");
+#endif
 	settings->setDefault("repeat_joystick_button_time", "0.17");
 	settings->setDefault("joystick_frustum_sensitivity", "170");
 	settings->setDefault("joystick_deadzone", "2048");
@@ -409,7 +447,11 @@ void set_default_settings()
 	settings->setDefault("mono_font_size_divisible_by", "1");
 	settings->setDefault("fallback_font_path", porting::getDataPath("fonts" DIR_DELIM "DroidSansFallbackFull.ttf"));
 
+#if defined(__SWITCH__)
+	std::string font_size_str = "24";
+#else
 	std::string font_size_str = std::to_string(TTF_DEFAULT_FONT_SIZE);
+#endif
 	settings->setDefault("font_size", font_size_str);
 	settings->setDefault("mono_font_size", font_size_str);
 	settings->setDefault("chat_font_size", "0"); // Default "font_size"
@@ -419,8 +461,10 @@ void set_default_settings()
 	settings->setDefault("contentdb_enable_updates_indicator", "true");
 	settings->setDefault("contentdb_max_concurrent_downloads", "3");
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__)
 	settings->setDefault("contentdb_flag_blacklist", "nonfree, android_default");
+#elif defined(__SWITCH__)
+	settings->setDefault("contentdb_flag_blacklist", "nonfree, switch_default");
 #else
 	settings->setDefault("contentdb_flag_blacklist", "nonfree, desktop_default");
 #endif
@@ -552,7 +596,11 @@ void set_default_settings()
 	settings->setDefault("server_announce_send_players", "true");
 
 	settings->setDefault("enable_console", "false");
+#if defined(__SWITCH__)
+	settings->setDefault("display_density_factor", "1.5");
+#else
 	settings->setDefault("display_density_factor", "1");
+#endif
 	settings->setDefault("dpi_change_notifier", "0");
 
 	settings->setDefault("touch_layout", "");
@@ -607,5 +655,21 @@ void set_default_settings()
 		settings->setDefault("mono_font_size", "14");
 	}
 	// Tablets >= 6.0 use non-Android defaults for these settings
+#endif
+
+	// Altered settings for Nintendo Switch homebrew
+#ifdef __SWITCH__
+	settings->setDefault("performance_tradeoffs", "true");
+	settings->setDefault("max_simultaneous_block_sends_per_client", "10");
+	settings->setDefault("emergequeue_limit_diskonly", "16");
+	settings->setDefault("emergequeue_limit_generate", "16");
+	settings->setDefault("max_block_generate_distance", "5");
+	settings->setDefault("sqlite_synchronous", "1");
+	settings->setDefault("server_map_save_interval", "15");
+	settings->setDefault("active_block_range", "2");
+	settings->setDefault("leaves_style", "simple");
+	settings->setDefault("debanding", "false");
+	settings->setDefault("post_processing_texture_bits", "8");
+	settings->setDefault("curl_verify_cert", "false");
 #endif
 }

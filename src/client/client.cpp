@@ -32,6 +32,7 @@
 #include "minimap.h"
 #include "node_visuals.h"
 #include "profiler.h"
+#include "porting.h"
 #include "shader.h"
 #include "translation.h"
 #include "util/auth.h"
@@ -72,6 +73,7 @@
 
 #include <iostream>
 #include <algorithm>
+#include <cstdio>
 #include <sstream>
 #include <cmath>
 
@@ -161,12 +163,26 @@ Client::Client(
 	m_state(LC_Created),
 	m_modchannel_mgr(new ModChannelMgr())
 {
+#if defined(__SWITCH__)
+	char message[192];
+	std::snprintf(message, sizeof(message),
+		"Client::Client: player='%s' password=%s len=%zu mode=%d",
+		playername, password.empty() ? "empty" : "set", password.size(),
+		static_cast<int>(allow_login_or_register));
+	porting::switchDebugTrace(message);
+#endif
 	// Add local player
 	m_env.setLocalPlayer(new LocalPlayer(this, playername));
 
 	// Make the mod storage database and begin the save for later
+#if defined(__SWITCH__)
+	m_mod_storage_database =
+			new ModStorageDatabaseFiles(porting::path_user + DIR_DELIM + "client");
+	porting::switchDebugTrace("Client::Client: using file client mod storage");
+#else
 	m_mod_storage_database =
 			new ModStorageDatabaseSQLite3(porting::path_user + DIR_DELIM + "client");
+#endif
 	m_mod_storage_database->beginSave();
 
 	if (g_settings->getBool("enable_minimap")) {
@@ -235,6 +251,10 @@ end
 
 void Client::migrateModStorage()
 {
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("Client::migrateModStorage: skipped on Switch");
+	return;
+#endif
 	std::string mod_storage_dir = porting::path_user + DIR_DELIM + "client";
 	std::string old_mod_storage = mod_storage_dir + DIR_DELIM + "mod_storage";
 	if (fs::IsDir(old_mod_storage)) {
@@ -448,6 +468,17 @@ void Client::connect(const Address &address, const std::string &address_name)
 	infostream << "Connecting to server at ";
 	address.print(infostream);
 	infostream << std::endl;
+#if defined(__SWITCH__)
+	{
+		std::ostringstream os;
+		address.print(os);
+		char message[192];
+		std::snprintf(message, sizeof(message),
+			"Client::connect: address_name='%s' resolved='%s'",
+			address_name.c_str(), os.str().c_str());
+		porting::switchDebugTrace(message);
+	}
+#endif
 
 	m_con->Connect(address);
 
@@ -912,7 +943,9 @@ bool Client::loadMedia(const std::string &data, const std::string &filename,
 		return true;
 	}
 
-	if (Translations::isTranslationFile(filename)) {
+	const char *translation_ext[] = {".tr", ".po", ".mo", NULL};
+	name = removeStringEnd(filename, translation_ext);
+	if (!name.empty()) {
 		if (from_media_push)
 			return false;
 		TRACESTREAM(<< "Client: Loading translation: "
@@ -953,6 +986,15 @@ void Client::deletingPeer(con::IPeer *peer, bool timeout)
 		m_access_denied_reason = gettext("Connection timed out.");
 	else if (m_access_denied_reason.empty())
 		m_access_denied_reason = gettext("Connection aborted (protocol error?).");
+#if defined(__SWITCH__)
+	{
+		char message[192];
+		std::snprintf(message, sizeof(message),
+			"Client::deletingPeer: timeout=%d reason='%s'",
+			timeout ? 1 : 0, m_access_denied_reason.c_str());
+		porting::switchDebugTrace(message);
+	}
+#endif
 }
 
 void Client::request_media(const std::vector<std::string> &file_requests)
@@ -1228,6 +1270,16 @@ void Client::startAuth(AuthMechanism chosen_auth_mechanism)
 	m_chosen_auth_mech = chosen_auth_mechanism;
 
 	std::string playername = m_env.getLocalPlayer()->getName();
+#if defined(__SWITCH__)
+	{
+		char message[192];
+		std::snprintf(message, sizeof(message),
+			"Client::startAuth: mech=%d player='%s' password=%s len=%zu",
+			static_cast<int>(chosen_auth_mechanism), playername.c_str(),
+			m_password.empty() ? "empty" : "set", m_password.size());
+		porting::switchDebugTrace(message);
+	}
+#endif
 
 	switch (chosen_auth_mechanism) {
 		case AUTH_MECHANISM_FIRST_SRP: {

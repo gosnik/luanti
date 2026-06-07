@@ -162,10 +162,7 @@ public:
 	void toggleCameraMode();
 
 	// Set the current camera mode
-	inline void setCameraMode(CameraMode mode)
-	{
-		m_camera_mode = mode;
-	}
+	void setCameraMode(CameraMode mode);
 
 	//read the current camera mode
 	inline CameraMode getCameraMode() const

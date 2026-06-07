@@ -96,6 +96,19 @@ cross-platform build.
 You can use `./gradlew assembleRelease` or `./gradlew assembleDebug` from the
 command line or use Android Studio and click the build button.
 
+To build a client locked to one private server, pass the lockdown properties
+to Gradle:
+
+```sh
+./gradlew assembleRelease \
+	-PlockdownClient=true \
+	-PlockdownServerName=play.example.net \
+	-PlockdownServerPort=30000
+```
+
+Locked clients save the entered username and password locally so the user can
+reconnect without retyping credentials.
+
 When using gradlew, the newest NDK will be downloaded and installed
 automatically. You have to create a `local.properties` file and specify
 `sdk.dir` yourself if you want to use an existing installation.

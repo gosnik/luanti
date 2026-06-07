@@ -250,7 +250,7 @@ void Thread::setName(const std::string &name)
 	} __except (EXCEPTION_CONTINUE_EXECUTION) {
 	}
 
-#elif defined(_WIN32) || defined(__GNU__)
+#elif defined(_WIN32) || defined(__GNU__) || defined(__SWITCH__)
 
 	// These platforms are known to not support thread names.
 	// Silently ignore the request.
@@ -332,6 +332,11 @@ bool Thread::setPriority(int prio)
 
 	return SetThreadPriority(win32_native_handle(), prio);
 
+#elif defined(__SWITCH__)
+
+	(void)prio;
+	return false;
+
 #else
 
 	struct sched_param sparam;
@@ -348,4 +353,3 @@ bool Thread::setPriority(int prio)
 
 #endif
 }
-

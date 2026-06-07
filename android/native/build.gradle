@@ -1,6 +1,24 @@
 apply plugin: 'com.android.library'
 apply plugin: 'de.undercouch.download'
 
+def cmakeArgs = [
+	"-DANDROID_STL=c++_shared",
+	"-DENABLE_CURL=1",
+	"-DENABLE_SOUND=1",
+	"-DENABLE_GETTEXT=1",
+	"-DBUILD_UNITTESTS=0",
+	"-DENABLE_UPDATE_CHECKER=0",
+]
+
+if (project.hasProperty("lockdownClient") && project.property("lockdownClient").toString().toBoolean()) {
+	if (!project.hasProperty("lockdownServerName")) {
+		throw new GradleException("lockdownClient requires -PlockdownServerName=<host>")
+	}
+	cmakeArgs.add("-DLOCKDOWN_CLIENT=1")
+	cmakeArgs.add("-DLOCKDOWN_SERVER_NAME=${project.property("lockdownServerName")}")
+	cmakeArgs.add("-DLOCKDOWN_SERVER_PORT=${project.findProperty("lockdownServerPort") ?: "30000"}")
+}
+
 android {
 	ndkVersion "$ndk_version"
 	defaultConfig {
@@ -9,10 +27,7 @@ android {
 		targetSdkVersion 34
 		externalNativeBuild {
 			cmake {
-				arguments "-DANDROID_STL=c++_shared",
-					"-DENABLE_CURL=1", "-DENABLE_SOUND=1",
-					"-DENABLE_GETTEXT=1",
-					"-DBUILD_UNITTESTS=0", "-DENABLE_UPDATE_CHECKER=0"
+				arguments(*cmakeArgs)
 			}
 		}
 	}

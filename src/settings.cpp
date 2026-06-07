@@ -384,6 +384,99 @@ bool Settings::updateConfigFile(const char *filename)
 	return true;
 }
 
+bool Settings::updateConfigFileValues(const char *filename,
+	const std::map<std::string, std::string> &values)
+{
+	for (const auto &pair : values) {
+		if (!checkNameValid(pair.first) || !checkValueValid(pair.second))
+			return false;
+	}
+
+	Settings parser;
+	std::ifstream is(filename);
+	std::ostringstream os(std::ios_base::binary);
+	std::set<std::string> remaining;
+	for (const auto &pair : values)
+		remaining.insert(pair.first);
+
+	std::string line, name, value;
+	u32 group_depth = 0;
+	bool was_modified = false;
+
+	while (is.good()) {
+		std::getline(is, line);
+		if (!is.good() && line.empty())
+			break;
+
+		SettingsParseEvent event = parser.parseConfigObject(line, name, value);
+
+		if (group_depth > 0) {
+			os << line << (is.eof() ? "" : "\n");
+			if (event == SPE_GROUP) {
+				group_depth++;
+			} else if (event == SPE_END) {
+				group_depth--;
+			} else if (event == SPE_MULTILINE) {
+				while (is.good()) {
+					std::getline(is, line);
+					os << line << (is.eof() ? "" : "\n");
+					if (line == "\"\"\"")
+						break;
+				}
+			}
+			continue;
+		}
+
+		if (event == SPE_GROUP) {
+			group_depth = 1;
+			os << line << (is.eof() ? "" : "\n");
+			continue;
+		}
+
+		if (event == SPE_MULTILINE && values.count(name) != 0)
+			value = getMultiline(is);
+
+		if ((event == SPE_KVPAIR || event == SPE_MULTILINE) &&
+				values.count(name) != 0) {
+			const std::string &new_value = values.at(name);
+			if (value != new_value || event == SPE_MULTILINE) {
+				printEntry(os, name, SettingsEntry(new_value));
+				was_modified = true;
+			} else {
+				os << line << "\n";
+			}
+			remaining.erase(name);
+			continue;
+		}
+
+		os << line << (is.eof() ? "" : "\n");
+		if (event == SPE_MULTILINE) {
+			while (is.good()) {
+				std::getline(is, line);
+				os << line << (is.eof() ? "" : "\n");
+				if (line == "\"\"\"")
+					break;
+			}
+		}
+	}
+	is.close();
+
+	if (!remaining.empty()) {
+		std::string current = os.str();
+		if (!current.empty() && current.back() != '\n')
+			os << "\n";
+		for (const std::string &missing_name : remaining) {
+			printEntry(os, missing_name, SettingsEntry(values.at(missing_name)));
+			was_modified = true;
+		}
+	}
+
+	if (!was_modified)
+		return true;
+
+	return fs::safeWriteToFile(filename, os.str());
+}
+
 
 bool Settings::parseCommandLine(int argc, char *argv[],
 		const std::map<std::string, ValueSpec> &allowed_options)

@@ -227,6 +227,47 @@ void GUIModalMenu::leave()
 
 bool GUIModalMenu::preprocessEvent(const SEvent &event)
 {
+#ifdef __SWITCH__
+	if (event.EventType == EET_MOUSE_INPUT_EVENT &&
+			(event.MouseInput.Event == EMIE_LMOUSE_PRESSED_DOWN ||
+			event.MouseInput.Event == EMIE_LMOUSE_DOUBLE_CLICK)) {
+		gui::IGUIElement *hovered =
+			Environment->getRootGUIElement()->getElementFromPoint(
+				core::position2d<s32>(event.MouseInput.X, event.MouseInput.Y));
+		if ((hovered) && (hovered->getType() == gui::EGUIET_EDIT_BOX)) {
+			bool retval = hovered->OnEvent(event);
+			if (retval)
+				Environment->setFocus(hovered);
+
+			std::string field_name = getNameByID(hovered->getID());
+			if (field_name.empty())
+				return retval;
+
+			gui::IGUIEditBox *editbox = (gui::IGUIEditBox *)hovered;
+			int type = editbox->isMultiLineEnabled() ? 1 : 2;
+			if (editbox->isPasswordBox())
+				type = 3;
+
+			std::string text;
+			if (porting::switchShowTextInputDialog(
+					wide_to_utf8(editbox->getText()), type, &text)) {
+				editbox->setText(utf8_to_wide(text).c_str());
+
+				if (editbox->getParent()) {
+					SEvent changed;
+					changed.EventType = EET_GUI_EVENT;
+					changed.GUIEvent.Caller = editbox;
+					changed.GUIEvent.Element = nullptr;
+					changed.GUIEvent.EventType = gui::EGET_EDITBOX_CHANGED;
+					editbox->getParent()->OnEvent(changed);
+				}
+			}
+
+			return true;
+		}
+	}
+#endif
+
 #ifdef __ANDROID__
 	// display software keyboard when clicking edit boxes
 	if (event.EventType == EET_MOUSE_INPUT_EVENT &&

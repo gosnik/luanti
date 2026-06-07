@@ -9,6 +9,7 @@
 #include "joystick_controller.h"
 #include <array>
 #include <set>
+#include <string>
 #include <unordered_map>
 #include "keycode.h"
 #include "settings.h"
@@ -159,6 +160,10 @@ public:
 
 	virtual float getJoystickSpeed() = 0;
 	virtual float getJoystickDirection() = 0;
+	virtual std::string getJoystickDebugString() const
+	{
+		return joystick.getDebugString();
+	}
 
 	virtual void clearWasKeyPressed() {}
 	virtual void clearWasKeyReleased() {}
@@ -283,6 +288,7 @@ public:
 	virtual bool cancelPressed() { return false; }
 	virtual float getJoystickSpeed() { return joystickSpeed; }
 	virtual float getJoystickDirection() { return joystickDirection; }
+	virtual std::string getJoystickDebugString() const { return ""; }
 	virtual v2s32 getMousePos() { return mousepos; }
 	virtual void setMousePos(s32 x, s32 y) { mousepos = v2s32(x, y); }
 

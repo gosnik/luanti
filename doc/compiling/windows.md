@@ -57,6 +57,19 @@ cmake --build . --config Release
 ```
 Make sure that the right compiler is selected and the path to the vcpkg toolchain is correct.
 
+To build a client locked to one private server, add the lockdown CMake options:
+
+```powershell
+cmake . -G"Visual Studio 16 2019" -DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_CURSES=OFF -DLOCKDOWN_CLIENT=TRUE -DLOCKDOWN_SERVER_NAME=play.example.net -DLOCKDOWN_SERVER_PORT=30000
+cmake --build . --config Release
+```
+
+The buildbot scripts also accept extra CMake arguments:
+
+```powershell
+util/buildbot/buildwin64.sh build/win64 -DLOCKDOWN_CLIENT=TRUE -DLOCKDOWN_SERVER_NAME=play.example.net -DLOCKDOWN_SERVER_PORT=30000
+```
+
 
 ## Windows Installer using WiX Toolset
 

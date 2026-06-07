@@ -9,6 +9,7 @@
 
 #include "keys.h"
 #include <bitset>
+#include <string>
 #include <vector>
 
 enum JoystickAxis {
@@ -141,6 +142,7 @@ public:
 
 	float getMovementDirection();
 	float getMovementSpeed();
+	std::string getDebugString() const;
 
 	u8 getJoystickId() const
 	{
@@ -155,6 +157,10 @@ private:
 	JoystickLayout m_layout;
 
 	s16 m_axes_vals[JA_COUNT];
+	s16 m_raw_axes_vals[SEvent::SJoystickEvent::NUMBER_OF_AXES];
+	u32 m_raw_button_states = 0;
+	u16 m_raw_pov = 65535;
+	bool m_has_raw_event = false;
 
 	u8 m_joystick_id = 0;
 

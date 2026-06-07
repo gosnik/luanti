@@ -88,11 +88,10 @@ public:
 	~ClientMediaDownloader();
 
 	float getProgress() const {
-		if (m_uncached_count >= 1)
-			return 1.0f * m_uncached_received_count /
-				m_uncached_count;
+		if (m_media_count >= 1)
+			return 1.0f * m_media_loaded_count / m_media_count;
 
-		return 0.0f;
+		return 1.0f;
 	}
 
 	bool isStarted() const override {
@@ -156,6 +155,12 @@ private:
 	bool m_initial_step_done = false;
 
 	// Total number of media files to load
+	s32 m_media_count = 0;
+
+	// Number of media files loaded from cache or received from the server
+	s32 m_media_loaded_count = 0;
+
+	// Total number of media files not loaded from cache
 	s32 m_uncached_count = 0;
 
 	// Number of media files that have been received

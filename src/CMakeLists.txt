@@ -68,7 +68,11 @@ if(PRECOMPILE_HEADERS)
 endif()
 
 
-option(ENABLE_CURL "Enable cURL support" TRUE)
+set(DEFAULT_ENABLE_CURL TRUE)
+if(LUANTI_SWITCH)
+	set(DEFAULT_ENABLE_CURL FALSE)
+endif()
+option(ENABLE_CURL "Enable cURL support" ${DEFAULT_ENABLE_CURL})
 set(USE_CURL FALSE)
 
 if(ENABLE_CURL)
@@ -91,7 +95,11 @@ if(NOT USE_CURL)
 endif()
 
 
-option(ENABLE_GETTEXT "Use GetText for internationalization" ${BUILD_CLIENT})
+set(DEFAULT_ENABLE_GETTEXT ${BUILD_CLIENT})
+if(LUANTI_SWITCH)
+	set(DEFAULT_ENABLE_GETTEXT FALSE)
+endif()
+option(ENABLE_GETTEXT "Use GetText for internationalization" ${DEFAULT_ENABLE_GETTEXT})
 set(USE_GETTEXT FALSE)
 
 if(ENABLE_GETTEXT)
@@ -110,7 +118,11 @@ else()
 endif()
 
 
-option(ENABLE_SOUND "Enable sound" TRUE)
+set(DEFAULT_ENABLE_SOUND TRUE)
+if(LUANTI_SWITCH)
+	set(DEFAULT_ENABLE_SOUND FALSE)
+endif()
+option(ENABLE_SOUND "Enable sound" ${DEFAULT_ENABLE_SOUND})
 set(USE_SOUND FALSE)
 
 if(BUILD_CLIENT AND ENABLE_SOUND)
@@ -136,6 +148,9 @@ endif()
 
 if(BUILD_CLIENT)
 	find_package(Freetype REQUIRED)
+	if(LUANTI_SWITCH)
+		find_package(SDL2 REQUIRED)
+	endif()
 endif()
 
 option(ENABLE_CURSES "Enable ncurses console" ${BUILD_SERVER})
@@ -152,7 +167,11 @@ if(ENABLE_CURSES)
 	endif()
 endif(ENABLE_CURSES)
 
-option(ENABLE_POSTGRESQL "Enable PostgreSQL backend" TRUE)
+set(DEFAULT_ENABLE_POSTGRESQL TRUE)
+if(LUANTI_SWITCH)
+	set(DEFAULT_ENABLE_POSTGRESQL FALSE)
+endif()
+option(ENABLE_POSTGRESQL "Enable PostgreSQL backend" ${DEFAULT_ENABLE_POSTGRESQL})
 set(USE_POSTGRESQL FALSE)
 
 if(ENABLE_POSTGRESQL)
@@ -180,7 +199,11 @@ if(ENABLE_POSTGRESQL)
 	endif()
 endif(ENABLE_POSTGRESQL)
 
-option(ENABLE_LEVELDB "Enable LevelDB backend" TRUE)
+set(DEFAULT_ENABLE_LEVELDB TRUE)
+if(LUANTI_SWITCH)
+	set(DEFAULT_ENABLE_LEVELDB FALSE)
+endif()
+option(ENABLE_LEVELDB "Enable LevelDB backend" ${DEFAULT_ENABLE_LEVELDB})
 set(USE_LEVELDB FALSE)
 
 if(ENABLE_LEVELDB)
@@ -196,7 +219,11 @@ if(ENABLE_LEVELDB)
 endif(ENABLE_LEVELDB)
 
 
-OPTION(ENABLE_REDIS "Enable Redis backend" TRUE)
+set(DEFAULT_ENABLE_REDIS TRUE)
+if(LUANTI_SWITCH)
+	set(DEFAULT_ENABLE_REDIS FALSE)
+endif()
+OPTION(ENABLE_REDIS "Enable Redis backend" ${DEFAULT_ENABLE_REDIS})
 set(USE_REDIS FALSE)
 
 if(ENABLE_REDIS)
@@ -235,7 +262,11 @@ else(USE_PROMETHEUS)
 	message(STATUS "Prometheus client disabled.")
 endif(USE_PROMETHEUS)
 
-OPTION(ENABLE_SPATIAL "Enable SpatialIndex AreaStore backend" TRUE)
+set(DEFAULT_ENABLE_SPATIAL TRUE)
+if(LUANTI_SWITCH)
+	set(DEFAULT_ENABLE_SPATIAL FALSE)
+endif()
+OPTION(ENABLE_SPATIAL "Enable SpatialIndex AreaStore backend" ${DEFAULT_ENABLE_SPATIAL})
 set(USE_SPATIAL FALSE)
 
 if(ENABLE_SPATIAL)
@@ -250,7 +281,11 @@ if(ENABLE_SPATIAL)
 	endif(SPATIAL_LIBRARY AND SPATIAL_INCLUDE_DIR)
 endif(ENABLE_SPATIAL)
 
-option(ENABLE_OPENSSL "Use OpenSSL's libcrypto for faster SHA implementations" TRUE)
+set(DEFAULT_ENABLE_OPENSSL TRUE)
+if(LUANTI_SWITCH)
+	set(DEFAULT_ENABLE_OPENSSL FALSE)
+endif()
+option(ENABLE_OPENSSL "Use OpenSSL's libcrypto for faster SHA implementations" ${DEFAULT_ENABLE_OPENSSL})
 set(USE_OPENSSL FALSE)
 
 if(ENABLE_OPENSSL)
@@ -280,9 +315,16 @@ endif()
 # Use cmake_config.h
 add_compile_definitions(USE_CMAKE_CONFIG_H)
 
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
-set(PLATFORM_LIBS Threads::Threads)
+if(LUANTI_SWITCH)
+	if(NOT TARGET Threads::Threads)
+		add_library(Threads::Threads INTERFACE IMPORTED)
+	endif()
+	set(PLATFORM_LIBS Threads::Threads)
+else()
+	set(THREADS_PREFER_PTHREAD_FLAG ON)
+	find_package(Threads REQUIRED)
+	set(PLATFORM_LIBS Threads::Threads)
+endif()
 
 if(WIN32)
 	# Windows
@@ -324,6 +366,8 @@ if(WIN32)
 			set(LUA_DLL "" CACHE FILEPATH "Path to luajit-5.1.dll for installation (optional)")
 		endif()
 	endif()
+elseif(LUANTI_SWITCH)
+	list(APPEND PLATFORM_LIBS harfbuzz bz2 nx m)
 else()
 	# Unix probably
 	list(APPEND PLATFORM_LIBS ${CMAKE_DL_LIBS})
@@ -504,6 +548,9 @@ set(common_SRCS
 if(ANDROID)
 	list(APPEND common_SRCS porting_android.cpp)
 endif()
+if(LUANTI_SWITCH)
+	list(APPEND common_SRCS porting_switch.cpp)
+endif()
 
 if(BUILD_UNITTESTS OR BUILD_BENCHMARKS)
 	list(APPEND common_SRCS catch.cpp)
@@ -575,8 +622,9 @@ include_directories(SYSTEM
 	${JSON_INCLUDE_DIR}
 	${LUA_BIT_INCLUDE_DIR}
 	# on Android, Luanti depends on SDL2 directly
+	# on Switch, SDL_main integration also requires direct SDL2 linkage
 	# on other platforms, only IrrlichtMt depends on SDL2
-	"$<$<PLATFORM_ID:Android>:${SDL2_INCLUDE_DIRS}>"
+	"$<$<OR:$<PLATFORM_ID:Android>,$<BOOL:${LUANTI_SWITCH}>>:${SDL2_INCLUDE_DIRS}>"
 )
 
 if(USE_GETTEXT)
@@ -701,10 +749,14 @@ if(BUILD_CLIENT)
 		${FREETYPE_LIBRARY}
 		${PLATFORM_LIBS}
 		# on Android, Luanti depends on SDL2 directly
+		# on Switch, SDL_main integration also requires direct SDL2 linkage
 		# on other platforms, only IrrlichtMt depends on SDL2
-		"$<$<PLATFORM_ID:Android>:${SDL2_LIBRARIES}>"
+		"$<$<OR:$<PLATFORM_ID:Android>,$<BOOL:${LUANTI_SWITCH}>>:${SDL2_LIBRARIES}>"
 	)
 	target_compile_definitions(${PROJECT_NAME} PRIVATE "MT_BUILDTARGET=1")
+	if(LUANTI_SWITCH)
+		target_compile_definitions(${PROJECT_NAME} PRIVATE __SWITCH__ LUANTI_SWITCH)
+	endif()
 	if(NOT USE_LUAJIT)
 		set_target_properties(${PROJECT_NAME} PROPERTIES
 			# This is necessary for dynamic Lua modules
@@ -956,6 +1008,9 @@ else()
 		endif()
 		add_compile_definitions(_WIN32_WINNT=0x0601 WIN32_LEAN_AND_MEAN)
 	endif()
+	if(LUANTI_SWITCH)
+		set(OTHER_FLAGS "${OTHER_FLAGS} -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -ffunction-sections -fdata-sections -fPIE")
+	endif()
 
 	# Use a safe subset of flags to speed up math calculations:
 	# - we don't need errno or math exceptions
@@ -1088,7 +1143,7 @@ if(BUILD_CLIENT AND NOT ANDROID)
 		ARCHIVE DESTINATION ${BINDIR}
 		BUNDLE DESTINATION .
 	)
-	if(UNIX)
+	if(UNIX AND NOT LUANTI_SWITCH)
 		CreateLegacyAlias(minetest_alias "${EXECUTABLE_OUTPUT_PATH}/minetest" ${PROJECT_NAME})
 	endif()
 
@@ -1114,7 +1169,7 @@ endif()
 
 if(BUILD_SERVER)
 	install(TARGETS ${PROJECT_NAME}server DESTINATION ${BINDIR})
-	if(UNIX)
+	if(UNIX AND NOT LUANTI_SWITCH)
 		CreateLegacyAlias(minetestserver_alias "${EXECUTABLE_OUTPUT_PATH}/minetestserver" ${PROJECT_NAME}server)
 	endif()
 endif()

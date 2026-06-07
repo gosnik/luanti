@@ -8,6 +8,8 @@
 #include "porting.h"
 #include "util/string.h"
 #include "util/numeric.h"
+#include <iomanip>
+#include <sstream>
 
 bool JoystickButtonCmb::isTriggered(const SEvent::SJoystickEvent &ev) const
 {
@@ -185,6 +187,51 @@ JoystickLayout create_ps5_layout()
 	return jlo;
 }
 
+JoystickLayout create_switch_layout()
+{
+	JoystickLayout jlo;
+	jlo.axes_deadzone = 7000;
+
+	const JoystickAxisLayout axes[JA_COUNT] = {
+		{0, 1}, // JA_SIDEWARD_MOVE (left stick X)
+		{1, 1}, // JA_FORWARD_MOVE (left stick Y)
+		{2, 1}, // JA_FRUSTUM_HORIZONTAL (right stick X)
+		{3, 1}, // JA_FRUSTUM_VERTICAL (right stick Y)
+	};
+	memcpy(jlo.axes, axes, sizeof(jlo.axes));
+
+	// Face buttons. SDL reports Nintendo controllers through its gamecontroller
+	// ordering, but the physical labels still need verification on hardware.
+	JLO_B_PB(KeyType::INVENTORY, 1 << 0,  1 << 0);  // A / east
+	JLO_B_PB(KeyType::JUMP,      1 << 1,  1 << 1);  // B / south
+	JLO_B_PB(KeyType::DROP,      1 << 3,  1 << 3);  // Y / west
+	JLO_B_PB(KeyType::ESC,       1 << 2,  1 << 2);  // X / north
+
+	// System/menu buttons.
+	JLO_B_PB(KeyType::ESC,       1 << 11,  1 << 11);  // Minus
+	JLO_B_PB(KeyType::ESC,       1 << 10,  1 << 10);  // Plus
+
+	// Stick clicks.
+	JLO_B_PB(KeyType::AUX1,      1 << 4,  1 << 4);  // L stick
+	JLO_B_PB(KeyType::SNEAK,     1 << 5,  1 << 5);  // R stick
+
+	// Shoulders.
+	JLO_B_PB(KeyType::HOTBAR_PREV, 1 << 6,  1 << 6);  // L
+	JLO_B_PB(KeyType::HOTBAR_NEXT, 1 << 7, 1 << 7); // R
+
+	// Triggers are normally analog axes in SDL's gamecontroller model.
+	JLO_B_PB(KeyType::PLACE, 1 << 8, 1 << 8); // ZL
+	JLO_B_PB(KeyType::DIG,   1 << 9, 1 << 9); // ZR
+
+	// D-pad.
+	JLO_B_PB(KeyType::ZOOM,       1 << 13, 1 << 13); // up
+	JLO_B_PB(KeyType::FREEMOVE,   1 << 15, 1 << 15); // down
+	JLO_B_PB(KeyType::NOCLIP,     1 << 12, 1 << 12); // left
+	JLO_B_PB(KeyType::FASTMOVE,   1 << 14, 1 << 14); // right
+
+	return jlo;
+}
+
 JoystickLayout create_dragonrise_gamecube_layout()
 {
 	JoystickLayout jlo;
@@ -271,6 +318,12 @@ void JoystickController::setLayoutFromControllerName(const std::string &name)
 	} else if (lowercase(name).find("ps5") != std::string::npos ||
 	           lowercase(name).find("dualsense") != std::string::npos) {
 		m_layout = create_ps5_layout();
+	} else if (lowercase(name).find("switch") != std::string::npos ||
+			lowercase(name).find("joy-con") != std::string::npos ||
+			lowercase(name).find("joycon") != std::string::npos ||
+			lowercase(name).find("pro controller") != std::string::npos ||
+			lowercase(name).find("nintendo") != std::string::npos) {
+		m_layout = create_switch_layout();
 	} else if (lowercase(name).find("dragonrise_gamecube") != std::string::npos) {
 		m_layout = create_dragonrise_gamecube_layout();
 	} else {
@@ -284,6 +337,10 @@ bool JoystickController::handleEvent(const SEvent::SJoystickEvent &ev)
 		return false;
 
 	m_internal_time = porting::getTimeMs() / 1000.f;
+	m_raw_button_states = ev.ButtonStates;
+	m_raw_pov = ev.POV;
+	m_has_raw_event = true;
+	memcpy(m_raw_axes_vals, ev.Axis, sizeof(m_raw_axes_vals));
 
 	std::bitset<KeyType::INTERNAL_ENUM_COUNT> keys_pressed;
 
@@ -305,7 +362,10 @@ bool JoystickController::handleEvent(const SEvent::SJoystickEvent &ev)
 
 	for (size_t i = 0; i < KeyType::INTERNAL_ENUM_COUNT; i++) {
 		if (keys_pressed[i]) {
-			if (!m_past_keys_pressed[i] &&
+			if (!m_keys_down[i]) {
+				m_past_keys_pressed[i] = true;
+				m_past_pressed_time[i] = m_internal_time;
+			} else if (!m_past_keys_pressed[i] &&
 					m_past_pressed_time[i] < m_internal_time - doubling_dtime) {
 				m_past_keys_pressed[i] = true;
 				m_past_pressed_time[i] = m_internal_time;
@@ -341,6 +401,86 @@ void JoystickController::clear()
 	m_past_keys_pressed.reset();
 	m_keys_released.reset();
 	memset(m_axes_vals, 0, sizeof(m_axes_vals));
+	memset(m_raw_axes_vals, 0, sizeof(m_raw_axes_vals));
+	m_raw_button_states = 0;
+	m_raw_pov = 65535;
+	m_has_raw_event = false;
+}
+
+static const char *debugKeyName(GameKeyType key)
+{
+	switch (key) {
+	case KeyType::FORWARD: return "FORWARD";
+	case KeyType::BACKWARD: return "BACKWARD";
+	case KeyType::LEFT: return "LEFT";
+	case KeyType::RIGHT: return "RIGHT";
+	case KeyType::JUMP: return "JUMP";
+	case KeyType::AUX1: return "AUX1";
+	case KeyType::SNEAK: return "SNEAK";
+	case KeyType::AUTOFORWARD: return "AUTOFORWARD";
+	case KeyType::DIG: return "DIG";
+	case KeyType::PLACE: return "PLACE";
+	case KeyType::ESC: return "ESC";
+	case KeyType::DROP: return "DROP";
+	case KeyType::INVENTORY: return "INVENTORY";
+	case KeyType::MINIMAP: return "MINIMAP";
+	case KeyType::FREEMOVE: return "FREEMOVE";
+	case KeyType::FASTMOVE: return "FASTMOVE";
+	case KeyType::NOCLIP: return "NOCLIP";
+	case KeyType::HOTBAR_PREV: return "HOTBAR_PREV";
+	case KeyType::HOTBAR_NEXT: return "HOTBAR_NEXT";
+	case KeyType::SCREENSHOT: return "SCREENSHOT";
+	case KeyType::CAMERA_MODE: return "CAMERA_MODE";
+	case KeyType::ZOOM: return "ZOOM";
+	default: return nullptr;
+	}
+}
+
+std::string JoystickController::getDebugString() const
+{
+	if (!m_has_raw_event)
+		return "joy: no event";
+
+	std::ostringstream os;
+	os << "joy" << static_cast<int>(m_joystick_id)
+		<< " btn=0x" << std::hex << std::setw(8) << std::setfill('0')
+		<< m_raw_button_states << std::dec << std::setfill(' ') << " [";
+
+	bool first = true;
+	for (u32 i = 0; i < SEvent::SJoystickEvent::NUMBER_OF_BUTTONS; i++) {
+		if (!(m_raw_button_states & (1 << i)))
+			continue;
+		if (!first)
+			os << ",";
+		os << i;
+		first = false;
+	}
+	os << "]";
+
+	os << " ax0-5=(";
+	for (u32 i = 0; i < 6; i++) {
+		if (i != 0)
+			os << ",";
+		os << m_raw_axes_vals[i];
+	}
+	os << ") pov=" << m_raw_pov;
+
+	os << " map=[";
+	first = true;
+	for (size_t i = 0; i < KeyType::INTERNAL_ENUM_COUNT; i++) {
+		if (!m_keys_down[i])
+			continue;
+		const char *name = debugKeyName(static_cast<GameKeyType>(i));
+		if (!name)
+			continue;
+		if (!first)
+			os << ",";
+		os << name;
+		first = false;
+	}
+	os << "]";
+
+	return os.str();
 }
 
 float JoystickController::getAxisWithoutDead(JoystickAxis axis)

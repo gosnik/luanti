@@ -5,6 +5,7 @@
 #include "game_internal.h"
 
 #include <cmath>
+#include <cstdio>
 #include <csignal>
 #include "client/gameui.h"
 #include "client/inputhandler.h"
@@ -439,6 +440,10 @@ bool Game::startup(volatile std::sig_atomic_t *kill,
 	this->chat_backend        = chat_backend;
 	simple_singleplayer_mode  = start_data.isSinglePlayer();
 
+#if defined(__SWITCH__)
+	porting::switchConsumeBackgrounded();
+#endif
+
 	input->reloadKeybindings();
 
 	driver = device->getVideoDriver();
@@ -517,6 +522,18 @@ void Game::run()
 			|| (server && server->isShutdownRequested()))) {
 
 		framemarker.end();
+
+#if defined(__SWITCH__)
+		if (!porting::switchIsForeground() || porting::switchConsumeBackgrounded()) {
+			porting::switchDebugTrace(
+				"Game::run: backgrounded; ending session for reconnect");
+			if (!simple_singleplayer_mode && reconnect_requested) {
+				*reconnect_requested = true;
+				error_message->clear();
+			}
+			break;
+		}
+#endif
 
 		// Calculate dtime =
 		//    m_rendering_engine->run() from this iteration
@@ -834,6 +851,17 @@ void Game::copyServerClientCache()
 bool Game::createClient(const GameStartData &start_data)
 {
 	showOverlayMessage(N_("Creating client..."), 0, 10);
+#if defined(__SWITCH__)
+	{
+		char message[192];
+		std::snprintf(message, sizeof(message),
+			"Game::createClient: address='%s' port=%u name='%s' password=%s len=%zu mode=%d",
+			start_data.address.c_str(), start_data.socket_port, start_data.name.c_str(),
+			start_data.password.empty() ? "empty" : "set", start_data.password.size(),
+			static_cast<int>(start_data.allow_login_or_register));
+		porting::switchDebugTrace(message);
+	}
+#endif
 
 	draw_control = new MapDrawControl();
 	if (!draw_control)
@@ -844,6 +872,9 @@ bool Game::createClient(const GameStartData &start_data)
 		return false;
 
 	if (!could_connect) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("Game::createClient: could_connect=false");
+#endif
 		if (error_message->empty() && !connect_aborted) {
 			// Should not happen if error messages are set properly
 			*error_message = gettext("Connection failed for unknown reason");
@@ -853,6 +884,9 @@ bool Game::createClient(const GameStartData &start_data)
 	}
 
 	if (!getServerContent(&connect_aborted)) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("Game::createClient: getServerContent failed");
+#endif
 		if (error_message->empty() && !connect_aborted) {
 			// Should not happen if error messages are set properly
 			*error_message = gettext("Connection failed for unknown reason");
@@ -968,6 +1002,15 @@ bool Game::connectToServer(const GameStartData &start_data,
 	*connect_ok = false;	// Let's not be overly optimistic
 	*connection_aborted = false;
 	const auto &address_name = start_data.address;
+#if defined(__SWITCH__)
+	{
+		char message[160];
+		std::snprintf(message, sizeof(message),
+			"Game::connectToServer: resolving '%s:%u'",
+			address_name.c_str(), start_data.socket_port);
+		porting::switchDebugTrace(message);
+	}
+#endif
 
 	showOverlayMessage(N_("Resolving address..."), 0, 15);
 
@@ -991,6 +1034,15 @@ bool Game::connectToServer(const GameStartData &start_data,
 		*error_message = fmtgettext("Couldn't resolve address: %s", e.what());
 
 		errorstream << *error_message << std::endl;
+#if defined(__SWITCH__)
+		{
+			char message[192];
+			std::snprintf(message, sizeof(message),
+				"Game::connectToServer: resolve failed '%s'",
+				e.what());
+			porting::switchDebugTrace(message);
+		}
+#endif
 		return false;
 	}
 
@@ -1014,6 +1066,17 @@ bool Game::connectToServer(const GameStartData &start_data,
 		infostream << "Resolved one address for \"" << address_name
 			<< "\" isIPv6=" << connect_address.isIPv6() << std::endl;
 	}
+#if defined(__SWITCH__)
+	{
+		std::ostringstream os;
+		connect_address.print(os);
+		char message[192];
+		std::snprintf(message, sizeof(message),
+			"Game::connectToServer: resolved primary='%s' fallback=%d",
+			os.str().c_str(), fallback_address.isValid() ? 1 : 0);
+		porting::switchDebugTrace(message);
+	}
+#endif
 
 
 	try {
@@ -1027,8 +1090,20 @@ bool Game::connectToServer(const GameStartData &start_data,
 	} catch (const BaseException &e) {
 		*error_message = fmtgettext("Error creating client: %s", e.what());
 		errorstream << *error_message << std::endl;
+#if defined(__SWITCH__)
+		{
+			char message[192];
+			std::snprintf(message, sizeof(message),
+				"Game::connectToServer: client creation failed '%s'",
+				e.what());
+			porting::switchDebugTrace(message);
+		}
+#endif
 		return false;
 	}
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("Game::connectToServer: client created");
+#endif
 
 	client->migrateModStorage();
 	client->m_simple_singleplayer_mode = simple_singleplayer_mode;
@@ -1039,6 +1114,9 @@ bool Game::connectToServer(const GameStartData &start_data,
 	*/
 
 	client->connect(connect_address, address_name);
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("Game::connectToServer: connect issued");
+#endif
 
 	try {
 		input->clear();
@@ -1064,6 +1142,9 @@ bool Game::connectToServer(const GameStartData &start_data,
 			// End condition
 			if (client->getState() == LC_Init) {
 				*connect_ok = true;
+#if defined(__SWITCH__)
+				porting::switchDebugTrace("Game::connectToServer: state LC_Init");
+#endif
 				break;
 			}
 
@@ -1077,6 +1158,9 @@ bool Game::connectToServer(const GameStartData &start_data,
 			if (input->cancelPressed()) {
 				*connection_aborted = true;
 				infostream << "Connect aborted [Escape]" << std::endl;
+#if defined(__SWITCH__)
+				porting::switchDebugTrace("Game::connectToServer: input cancel");
+#endif
 				break;
 			}
 
@@ -1086,11 +1170,17 @@ bool Game::connectToServer(const GameStartData &start_data,
 			} else if (wait_time > GAME_FALLBACK_TIMEOUT && !did_fallback) {
 				if (!client->hasServerReplied() && fallback_address.isValid()) {
 					client->connect(fallback_address, address_name);
+#if defined(__SWITCH__)
+					porting::switchDebugTrace("Game::connectToServer: fallback connect issued");
+#endif
 				}
 				did_fallback = true;
 			} else if (wait_time > GAME_CONNECTION_TIMEOUT) {
 				*error_message = gettext("Connection timed out.");
 				errorstream << *error_message << std::endl;
+#if defined(__SWITCH__)
+				porting::switchDebugTrace("Game::connectToServer: timeout");
+#endif
 				break;
 			}
 
@@ -1100,9 +1190,17 @@ bool Game::connectToServer(const GameStartData &start_data,
 		framemarker.end();
 	} catch (con::PeerNotFoundException &e) {
 		warningstream << "This should not happen. Please report a bug." << std::endl;
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("Game::connectToServer: PeerNotFoundException");
+#endif
 		return false;
 	}
 
+#if defined(__SWITCH__)
+	porting::switchDebugTrace(*connect_ok ?
+		"Game::connectToServer: return connect_ok=true" :
+		"Game::connectToServer: return connect_ok=false");
+#endif
 	return true;
 }
 
@@ -1224,6 +1322,15 @@ bool Game::checkConnection()
 		*error_message = fmtgettext("Access denied. Reason: %s", reason.c_str());
 		*reconnect_requested = client->reconnectRequested();
 		errorstream << *error_message << std::endl;
+#if defined(__SWITCH__)
+		{
+			char message[256];
+			std::snprintf(message, sizeof(message),
+				"Game::checkConnection: access denied reason='%s' reconnect=%d",
+				reason.c_str(), *reconnect_requested ? 1 : 0);
+			porting::switchDebugTrace(message);
+		}
+#endif
 		return false;
 	}
 
@@ -1262,6 +1369,28 @@ void Game::updateDebugState()
 
 	// noclip
 	draw_control->allow_noclip = m_cache_enable_noclip && client->checkPrivilege("noclip");
+
+#if defined(__SWITCH__)
+	static bool last_fly = false;
+	static bool last_noclip = false;
+	static bool last_interact = false;
+	static bool first_privilege_trace = true;
+	bool fly = client->checkPrivilege("fly");
+	bool noclip = client->checkPrivilege("noclip");
+	bool interact = client->checkPrivilege("interact");
+	if (first_privilege_trace || fly != last_fly || noclip != last_noclip ||
+			interact != last_interact) {
+		char message[128];
+		std::snprintf(message, sizeof(message),
+			"privilege state: fly=%d noclip=%d interact=%d",
+			fly ? 1 : 0, noclip ? 1 : 0, interact ? 1 : 0);
+		porting::switchDebugTrace(message);
+		last_fly = fly;
+		last_noclip = noclip;
+		last_interact = interact;
+		first_privilege_trace = false;
+	}
+#endif
 }
 
 void Game::updateProfilers(const RunStats &stats, const FpsControl &draw_times,
@@ -1374,6 +1503,16 @@ void Game::processUserInput(f32 dtime)
 		g_touchcontrols = nullptr;
 	}
 
+	if (guienv->hasFocus(gui_chat_console.get()) && gui_chat_console->isOpen() &&
+			wasKeyDown(KeyType::ESC)) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("chat: closing console from mapped ESC");
+#endif
+		gui_chat_console->closeConsoleAtOnce();
+		input->releaseAllKeys();
+		return;
+	}
+
 	// Reset input if window not active or some menu is active
 	if (!device->isWindowActive() || isMenuActive() || guienv->hasFocus(gui_chat_console.get())) {
 		if (m_game_focused) {
@@ -1453,14 +1592,23 @@ void Game::processKeyInput()
 	} else if (wasKeyDown(KeyType::CONSOLE)) {
 		openConsole(core::clamp(g_settings->getFloat("console_height"), 0.1f, 1.0f));
 	} else if (wasKeyDown(KeyType::FREEMOVE)) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("input: toggle fly");
+#endif
 		toggleFreeMove();
 	} else if (wasKeyDown(KeyType::JUMP)) {
 		toggleFreeMoveAlt();
 	} else if (wasKeyDown(KeyType::PITCHMOVE)) {
 		togglePitchMove();
 	} else if (wasKeyDown(KeyType::FASTMOVE)) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("input: toggle fast");
+#endif
 		toggleFast();
 	} else if (wasKeyDown(KeyType::NOCLIP)) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("input: toggle noclip");
+#endif
 		toggleNoClip();
 #if USE_SOUND
 	} else if (wasKeyDown(KeyType::MUTE)) {
@@ -1602,6 +1750,20 @@ void Game::openConsole(float scale, const wchar_t *line)
 {
 	assert(scale > 0.0f && scale <= 1.0f);
 
+#if defined(__SWITCH__)
+	if (line) {
+		std::string text;
+		porting::switchDebugTrace("chat: opening switch keyboard");
+		if (porting::switchShowTextInputDialog(wide_to_utf8(line), 2, &text)) {
+			client->typeChatMessage(utf8_to_wide(text));
+			porting::switchDebugTrace("chat: switch keyboard accepted");
+		} else {
+			porting::switchDebugTrace("chat: switch keyboard canceled");
+		}
+		return;
+	}
+#endif
+
 #ifdef __ANDROID__
 	if (!porting::hasPhysicalKeyboardAndroid()) {
 		porting::showTextInputDialog("", "", 2);
@@ -1640,6 +1802,15 @@ void Game::toggleFreeMove()
 {
 	bool free_move = !g_settings->getBool("free_move");
 	g_settings->set("free_move", bool_to_cstr(free_move));
+#if defined(__SWITCH__)
+	{
+		char message[96];
+		std::snprintf(message, sizeof(message),
+			"input: fly setting=%d privilege=%d",
+			free_move ? 1 : 0, client->checkPrivilege("fly") ? 1 : 0);
+		porting::switchDebugTrace(message);
+	}
+#endif
 
 	if (free_move) {
 		if (client->checkPrivilege("fly")) {
@@ -1705,6 +1876,15 @@ void Game::toggleNoClip()
 {
 	bool noclip = !g_settings->getBool("noclip");
 	g_settings->set("noclip", bool_to_cstr(noclip));
+#if defined(__SWITCH__)
+	{
+		char message[96];
+		std::snprintf(message, sizeof(message),
+			"input: noclip setting=%d privilege=%d",
+			noclip ? 1 : 0, client->checkPrivilege("noclip") ? 1 : 0);
+		porting::switchDebugTrace(message);
+	}
+#endif
 
 	if (noclip) {
 		if (client->checkPrivilege("noclip")) {
@@ -2788,8 +2968,12 @@ void Game::processPlayerInteraction(f32 dtime, bool show_hud)
 
 	if (selected_def.usable && isKeyDown(KeyType::DIG)) {
 		if (wasKeyPressed(KeyType::DIG) && (!client->modsLoaded() ||
-				!client->getScript()->on_item_use(selected_item, pointed)))
+				!client->getScript()->on_item_use(selected_item, pointed))) {
+#if defined(__SWITCH__)
+			porting::switchDebugTrace("input: item use");
+#endif
 			client->interact(INTERACT_USE, pointed);
+		}
 	} else if (pointed.type == POINTEDTHING_NODE) {
 		handlePointingAtNode(pointed, selected_item, hand_item, dtime);
 	} else if (pointed.type == POINTEDTHING_OBJECT) {
@@ -2968,6 +3152,9 @@ void Game::handlePointingAtNode(const PointedThing &pointed,
 	if ((wasKeyPressed(KeyType::PLACE) ||
 			runData.repeat_place_timer >= m_repeat_place_time) &&
 			client->checkPrivilege("interact")) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("input: place node/object");
+#endif
 		runData.repeat_place_timer = 0;
 		infostream << "Place button pressed while looking at ground" << std::endl;
 
@@ -2986,6 +3173,11 @@ void Game::handlePointingAtNode(const PointedThing &pointed,
 
 		if (placed && client->modsLoaded())
 			client->getScript()->on_placenode(pointed, def);
+#if defined(__SWITCH__)
+	} else if (wasKeyPressed(KeyType::PLACE) && !client->checkPrivilege("interact")) {
+		porting::switchDebugTrace("input: place blocked; no interact privilege");
+		m_game_ui->showTranslatedStatusText("No 'interact' privilege");
+#endif
 	}
 }
 
@@ -3257,6 +3449,10 @@ void Game::handlePointingAtObject(const PointedThing &pointed, const ItemStack &
 		}
 	} else if (wasKeyDown(KeyType::PLACE)) {
 		infostream << "Pressed place button while pointing at object" << std::endl;
+#if defined(__SWITCH__)
+		porting::switchDebugTrace(client->checkPrivilege("interact") ?
+			"input: place object" : "input: place object; no interact privilege");
+#endif
 		client->interact(INTERACT_PLACE, pointed);  // place
 	}
 }
@@ -3544,8 +3740,20 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 		updateShadows();
 	}
 
+	std::string joystick_debug = input->getJoystickDebugString();
+#if defined(__SWITCH__)
+	joystick_debug += "\nprivs:";
+	const auto &privileges = client->getPrivilegeList();
+	if (privileges.empty()) {
+		joystick_debug += " <none>";
+	} else {
+		for (const std::string &privilege : privileges)
+			joystick_debug += " " + privilege;
+	}
+	joystick_debug += porting::switchGetDebugTraceOverlay();
+#endif
 	m_game_ui->update(*stats, client, draw_control, cam, runData.pointed_old,
-			gui_chat_console.get(), dtime);
+			gui_chat_console.get(), dtime, joystick_debug);
 
 	m_game_formspec.update();
 
@@ -3684,8 +3892,37 @@ void Game::drawScene(ProfilerGraph *graph, RunStats *stats)
 			(player->hud_flags & HUD_FLAG_CROSSHAIR_VISIBLE) &&
 			(this->camera->getCameraMode() != CAMERA_MODE_THIRD_FRONT));
 
+#if !defined(__SWITCH__)
 	if (isTouchShootlineUsed())
 		draw_crosshair = false;
+#endif
+
+#if defined(__SWITCH__)
+	{
+		static CameraMode last_camera_mode = CAMERA_MODE_ANY;
+		static bool last_draw_crosshair = false;
+		static bool last_crosshair_flag = false;
+		static bool last_touch_shootline = false;
+		const CameraMode camera_mode = this->camera->getCameraMode();
+		const bool crosshair_flag = player->hud_flags & HUD_FLAG_CROSSHAIR_VISIBLE;
+		const bool touch_shootline = isTouchShootlineUsed();
+		if (camera_mode != last_camera_mode ||
+				draw_crosshair != last_draw_crosshair ||
+				crosshair_flag != last_crosshair_flag ||
+				touch_shootline != last_touch_shootline) {
+			char message[128];
+			std::snprintf(message, sizeof(message),
+				"crosshair: draw=%d mode=%d flag=%d touch=%d",
+				draw_crosshair ? 1 : 0, static_cast<int>(camera_mode),
+				crosshair_flag ? 1 : 0, touch_shootline ? 1 : 0);
+			porting::switchDebugTrace(message);
+			last_camera_mode = camera_mode;
+			last_draw_crosshair = draw_crosshair;
+			last_crosshair_flag = crosshair_flag;
+			last_touch_shootline = touch_shootline;
+		}
+	}
+#endif
 
 	this->m_rendering_engine->draw_scene(sky_color, this->m_game_ui->m_flags.show_hud,
 			draw_wield_tool, draw_crosshair);

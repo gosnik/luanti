@@ -30,6 +30,7 @@
 #include "util/string.h"
 
 #include <cassert>
+#include <cstdio>
 #include <iostream>
 
 /******************************************************************************/
@@ -1109,6 +1110,53 @@ int ModApiMainMenu::l_do_async_callback(lua_State *L)
 }
 
 /******************************************************************************/
+int ModApiMainMenu::l_get_lockdown_info(lua_State *L)
+{
+	lua_createtable(L, 0, 3);
+	lua_pushboolean(L, LOCKDOWN_CLIENT);
+	lua_setfield(L, -2, "enabled");
+	lua_pushstring(L, LOCKDOWN_SERVER_NAME);
+	lua_setfield(L, -2, "server_name");
+	lua_pushinteger(L, LOCKDOWN_SERVER_PORT);
+	lua_setfield(L, -2, "server_port");
+	return 1;
+}
+
+/******************************************************************************/
+int ModApiMainMenu::l_save_lockdown_credentials(lua_State *L)
+{
+	std::string name = trim(readParam<std::string>(L, 1));
+	std::string password = readParam<std::string>(L, 2);
+	bool success = false;
+
+#if LOCKDOWN_CLIENT
+	g_settings->set("name", name);
+	g_settings->set("lockdown_playername", name);
+	g_settings->set("lockdown_password", password);
+
+	if (!g_settings_path.empty()) {
+		success = g_settings->updateConfigFileValues(g_settings_path.c_str(), {
+			{"name", name},
+			{"lockdown_playername", name},
+			{"lockdown_password", password},
+		});
+	}
+#endif
+
+#if defined(__SWITCH__)
+	char message[160];
+	std::snprintf(message, sizeof(message),
+		"lua lockdown credentials save: name='%s' password=%s len=%zu file_saved=%d",
+		name.c_str(), password.empty() ? "empty" : "set", password.size(),
+		success ? 1 : 0);
+	porting::switchDebugTrace(message);
+#endif
+
+	lua_pushboolean(L, success);
+	return 1;
+}
+
+/******************************************************************************/
 void ModApiMainMenu::Initialize(lua_State *L, int top)
 {
 	API_FCT(update_formspec);
@@ -1158,6 +1206,8 @@ void ModApiMainMenu::Initialize(lua_State *L, int top)
 	API_FCT(get_max_supp_proto);
 	API_FCT(get_formspec_version);
 	API_FCT(is_debug_build);
+	API_FCT(get_lockdown_info);
+	API_FCT(save_lockdown_credentials);
 	API_FCT(open_url);
 	API_FCT(open_url_dialog);
 	API_FCT(open_dir);

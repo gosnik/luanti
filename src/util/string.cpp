@@ -18,13 +18,13 @@
 #include <iomanip>
 #include <unordered_map>
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__SWITCH__)
 	#include <iconv.h>
-#else
+#elif defined(_WIN32)
 	#include <windows.h>
 #endif
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__SWITCH__)
 
 namespace {
 	class IconvSmartPointer {
@@ -139,6 +139,113 @@ std::string wide_to_utf8(std::wstring_view input)
 	return out;
 }
 
+#elif defined(__SWITCH__)
+
+std::wstring utf8_to_wide(std::string_view input)
+{
+	std::wstring out;
+	out.reserve(input.size());
+
+	for (size_t i = 0; i < input.size();) {
+		unsigned char c = static_cast<unsigned char>(input[i]);
+		char32_t codepoint = 0;
+		size_t continuation = 0;
+
+		if (c < 0x80) {
+			codepoint = c;
+		} else if ((c & 0xE0) == 0xC0) {
+			codepoint = c & 0x1F;
+			continuation = 1;
+		} else if ((c & 0xF0) == 0xE0) {
+			codepoint = c & 0x0F;
+			continuation = 2;
+		} else if ((c & 0xF8) == 0xF0) {
+			codepoint = c & 0x07;
+			continuation = 3;
+		} else {
+			return L"<invalid UTF-8 string>";
+		}
+
+		if (i + continuation >= input.size())
+			return L"<invalid UTF-8 string>";
+
+		for (size_t j = 1; j <= continuation; j++) {
+			unsigned char cc = static_cast<unsigned char>(input[i + j]);
+			if ((cc & 0xC0) != 0x80)
+				return L"<invalid UTF-8 string>";
+			codepoint = (codepoint << 6) | (cc & 0x3F);
+		}
+
+		if ((continuation == 1 && codepoint < 0x80) ||
+				(continuation == 2 && codepoint < 0x800) ||
+				(continuation == 3 && codepoint < 0x10000) ||
+				codepoint > 0x10FFFF ||
+				(codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
+			return L"<invalid UTF-8 string>";
+		}
+
+		if constexpr (sizeof(wchar_t) == 2) {
+			if (codepoint > 0xFFFF) {
+				codepoint -= 0x10000;
+				out.push_back(static_cast<wchar_t>(0xD800 + (codepoint >> 10)));
+				out.push_back(static_cast<wchar_t>(0xDC00 + (codepoint & 0x3FF)));
+			} else {
+				out.push_back(static_cast<wchar_t>(codepoint));
+			}
+		} else {
+			out.push_back(static_cast<wchar_t>(codepoint));
+		}
+
+		i += continuation + 1;
+	}
+
+	return out;
+}
+
+std::string wide_to_utf8(std::wstring_view input)
+{
+	std::string out;
+	out.reserve(input.size());
+
+	for (size_t i = 0; i < input.size(); i++) {
+		char32_t codepoint = static_cast<char32_t>(input[i]);
+
+		if constexpr (sizeof(wchar_t) == 2) {
+			if (codepoint >= 0xD800 && codepoint <= 0xDBFF) {
+				if (++i >= input.size())
+					return "<invalid wide string>";
+				char32_t low = static_cast<char32_t>(input[i]);
+				if (low < 0xDC00 || low > 0xDFFF)
+					return "<invalid wide string>";
+				codepoint = 0x10000 + ((codepoint - 0xD800) << 10) +
+					(low - 0xDC00);
+			} else if (codepoint >= 0xDC00 && codepoint <= 0xDFFF) {
+				return "<invalid wide string>";
+			}
+		}
+
+		if (codepoint <= 0x7F) {
+			out.push_back(static_cast<char>(codepoint));
+		} else if (codepoint <= 0x7FF) {
+			out.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+			out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+		} else if (codepoint <= 0xFFFF) {
+			out.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+			out.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+			out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+		} else if (codepoint <= 0x10FFFF) {
+			out.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
+			out.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+			out.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+			out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+		} else {
+			return "<invalid wide string>";
+		}
+	}
+
+	return out;
+}
+
 #else // _WIN32
 
 std::wstring utf8_to_wide(std::string_view input)
@@ -165,7 +272,7 @@ std::string wide_to_utf8(std::wstring_view input)
 	return out;
 }
 
-#endif // _WIN32
+#endif // _WIN32 / __SWITCH__
 
 void wide_add_codepoint(std::wstring &result, char32_t codepoint)
 {

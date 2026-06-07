@@ -119,6 +119,19 @@ std::string getDataPath(const char *subpath);
 */
 void initializePaths();
 
+#if defined(__SWITCH__)
+/*
+	Write a boot breadcrumb before the normal logger is available.
+*/
+void switchDebugTrace(const char *message);
+std::string switchGetDebugTraceOverlay();
+bool switchProcessAppEvents();
+bool switchIsForeground();
+bool switchConsumeBackgrounded();
+bool switchShowTextInputDialog(const std::string &current, int edit_type,
+		std::string *out_text);
+#endif
+
 /*
 	Return system information
 	e.g. "Linux/3.12.7 x86_64"
@@ -247,6 +260,8 @@ inline const char *getPlatformName()
 	return
 #if defined(ANDROID)
 	"Android"
+#elif defined(__SWITCH__)
+	"Nintendo Switch"
 #elif defined(__linux__)
 	"Linux"
 #elif defined(_WIN32) || defined(_WIN64)

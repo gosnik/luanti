@@ -79,7 +79,8 @@ void GameUI::init()
 
 void GameUI::update(const RunStats &stats, Client *client, MapDrawControl *draw_control,
 	const CameraOrientation &cam, const PointedThing &pointed_old,
-	const GUIChatConsole *chat_console, float dtime)
+	const GUIChatConsole *chat_console, float dtime,
+	const std::string &joystick_debug)
 {
 	v2u32 screensize = RenderingEngine::getWindowSize();
 
@@ -107,6 +108,8 @@ void GameUI::update(const RunStats &stats, Client *client, MapDrawControl *draw_
 			<< (draw_control->range_all ? "All" : itos(draw_control->wanted_range))
 			<< std::setprecision(2)
 			<< " | RTT: " << (client->getRTT() * 1000.0f) << "ms";
+		if (!joystick_debug.empty())
+			os << "\n" << joystick_debug;
 
 		m_guitext->setRelativePosition(core::rect<s32>(5, 5, screensize.X, screensize.Y));
 

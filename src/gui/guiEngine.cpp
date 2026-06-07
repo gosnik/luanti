@@ -343,6 +343,15 @@ void GUIEngine::run()
 
 	while (m_rendering_engine->run() && !m_startgame && !m_kill) {
 		framemarker.end();
+
+#if defined(__SWITCH__)
+		if (!porting::switchIsForeground()) {
+			fps_control.reset();
+			framemarker.start();
+			continue;
+		}
+#endif
+
 		fps_control.limit(device, &dtime);
 		framemarker.start();
 

@@ -37,6 +37,7 @@ private:
 	void main_menu(MainMenuData *menudata);
 
 	bool skip_main_menu = false;
+	bool lockdown_auto_connect_once = false;
 	bool random_input = false;
 	RenderingEngine *m_rendering_engine = nullptr;
 	InputHandler *input = nullptr;

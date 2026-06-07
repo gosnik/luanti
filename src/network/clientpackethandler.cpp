@@ -26,6 +26,7 @@
 #include "network/clientopcodes.h"
 #include "network/connection.h"
 #include "network/networkpacket.h"
+#include "porting.h"
 #include "script/scripting_client.h"
 #include "util/serialize.h"
 #include "util/srp.h"
@@ -34,6 +35,7 @@
 #include "gettext.h"
 #include "skyparams.h"
 #include "particles.h"
+#include <cstdio>
 #include <memory>
 #include <sstream>
 
@@ -81,6 +83,19 @@ void Client::handleCommand_Hello(NetworkPacket* pkt)
 			<< ", auth_mechs=" << auth_mechs
 			<< ", proto_ver=" << proto_ver
 			<< ". Doing auth with mech " << chosen_auth_mechanism << std::endl;
+#if defined(__SWITCH__)
+	{
+		char message[160];
+		std::snprintf(message, sizeof(message),
+			"Client::handleCommand_Hello: ser=%u proto=%u auth_mechs=%u chosen=%d allow=%d",
+			static_cast<unsigned int>(serialization_ver),
+			static_cast<unsigned int>(proto_ver),
+			static_cast<unsigned int>(auth_mechs),
+			static_cast<int>(chosen_auth_mechanism),
+			static_cast<int>(m_allow_login_or_register));
+		porting::switchDebugTrace(message);
+	}
+#endif
 
 	if (!ser_ver_supported_read(serialization_ver)) {
 		infostream << "Client: TOCLIENT_HELLO: Server sent "
@@ -117,6 +132,9 @@ void Client::handleCommand_Hello(NetworkPacket* pkt)
 				m_access_denied_reason =
 						gettext("Name is taken. Please choose another name");
 			}
+#if defined(__SWITCH__)
+			porting::switchDebugTrace("Client::handleCommand_Hello: login/register mode mismatch");
+#endif
 			m_con->Disconnect();
 		} else {
 			startAuth(chosen_auth_mechanism);
@@ -125,6 +143,9 @@ void Client::handleCommand_Hello(NetworkPacket* pkt)
 		m_chosen_auth_mech = AUTH_MECHANISM_NONE;
 		m_access_denied = true;
 		m_access_denied_reason = "Unknown";
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("Client::handleCommand_Hello: no supported auth mechanism");
+#endif
 		m_con->Disconnect();
 	}
 
@@ -141,6 +162,9 @@ void Client::handleCommand_AuthAccept(NetworkPacket* pkt)
 	infostream << "Client: received map seed: " << m_map_seed << std::endl;
 	infostream << "Client: received recommended send interval "
 					<< m_recommended_send_interval<<std::endl;
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("Client::handleCommand_AuthAccept: accepted");
+#endif
 
 	// Reply to server
 	/* TRANSLATORS: DO NOT TRANSLATE THIS LITERALLY!
@@ -204,6 +228,15 @@ void Client::handleCommand_AccessDenied(NetworkPacket* pkt)
 			*pkt >> wide_reason;
 			m_access_denied_reason = wide_to_utf8(wide_reason);
 		}
+#if defined(__SWITCH__)
+		{
+			char message[256];
+			std::snprintf(message, sizeof(message),
+				"Client::handleCommand_AccessDenied: legacy reason='%s'",
+				m_access_denied_reason.c_str());
+			porting::switchDebugTrace(message);
+		}
+#endif
 		return;
 	}
 
@@ -234,6 +267,17 @@ void Client::handleCommand_AccessDenied(NetworkPacket* pkt)
 			m_access_denied_reason = gettext(accessDeniedStrings[denyCode]);
 		}
 	}
+#if defined(__SWITCH__)
+	{
+		char message[256];
+		std::snprintf(message, sizeof(message),
+			"Client::handleCommand_AccessDenied: code=%u reconnect=%u reason='%s'",
+			static_cast<unsigned int>(denyCode),
+			static_cast<unsigned int>(reconnect),
+			m_access_denied_reason.c_str());
+		porting::switchDebugTrace(message);
+	}
+#endif
 
 	if (denyCode == SERVER_ACCESSDENIED_TOO_MANY_USERS) {
 		m_access_denied_reconnect = true;
@@ -904,6 +948,9 @@ void Client::handleCommand_Privileges(NetworkPacket* pkt)
 {
 	m_privileges.clear();
 	infostream << "Client: Privileges updated: ";
+#if defined(__SWITCH__)
+	std::string switch_privileges;
+#endif
 	u16 num_privileges;
 
 	*pkt >> num_privileges;
@@ -915,8 +962,16 @@ void Client::handleCommand_Privileges(NetworkPacket* pkt)
 
 		m_privileges.insert(priv);
 		infostream << priv << " ";
+#if defined(__SWITCH__)
+		if (!switch_privileges.empty())
+			switch_privileges += ",";
+		switch_privileges += priv;
+#endif
 	}
 	infostream << std::endl;
+#if defined(__SWITCH__)
+	porting::switchDebugTrace(("privileges: " + switch_privileges).c_str());
+#endif
 }
 
 void Client::handleCommand_InventoryFormSpec(NetworkPacket* pkt)

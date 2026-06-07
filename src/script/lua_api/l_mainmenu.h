@@ -139,6 +139,9 @@ private:
 
 	static int l_is_debug_build(lua_State  *L);
 
+	static int l_get_lockdown_info(lua_State *L);
+	static int l_save_lockdown_credentials(lua_State *L);
+
 	// other
 	static int l_open_url(lua_State *L);
 

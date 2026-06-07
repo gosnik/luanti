@@ -1,0 +1,37 @@
+osSpecificInit: begin
+osSpecificInit: socketInitializeDefault ok
+osSpecificInit: applet exit locked
+osSpecificInit: end
+main: osSpecificInit complete
+main: env opts loaded
+main: command line parsed
+main: log params setup complete
+setSystemPaths: begin
+setSystemPaths: app dir ok
+setSystemPaths: cache dir ok
+setSystemPaths: worlds dir ok
+setSystemPaths: screenshots dir ok
+setSystemPaths: client dir ok
+setSystemPaths: end ok
+main: initializePaths complete
+main: create_userdata_path complete
+init_common: settings layers created
+init_common: config loaded
+init_common: settings migrated
+init_common: log streams initialized
+main: init_common complete
+main: game_configure complete
+main: starting ClientLauncher
+ClientLauncher::run: begin
+ClientLauncher::run: init_args complete
+ClientLauncher::run: init_engine complete
+ClientLauncher::run: top level window setup complete
+ClientLauncher::run: input initialized
+ClientLauncher::run: gui env configured
+ClientLauncher::run: font engine failed
+main: ClientLauncher returned failure
+main: returning from main
+cleanupSwitch: begin
+cleanupSwitch: applet exit unlocked
+cleanupSwitch: socket exited
+cleanupSwitch: end

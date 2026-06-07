@@ -1,0 +1,42 @@
+evolve.max_radius (Max terraform radius) int 3000 1 5000
+evolve.max_volume (Max nodes changed per operation) int 1000000 1 2000000
+evolve.terraform_sync_radius (Max undoable terraform radius) int 64 1 256
+evolve.terraform_chunk_size (Terraform chunk size) int 32 8 80
+evolve.terraform_chunks_per_step (Terraform chunks per server step) int 1 1 16
+evolve.time_enable (Enable Evolve time controller) bool true
+evolve.time_day_start (Daylight start time-of-day) float 0.23 0 1
+evolve.time_night_start (Night start time-of-day) float 0.77 0 1
+evolve.time_day_speed (Daylight speed multiplier) float 0.5 0 10
+evolve.time_night_speed (Night speed multiplier) float 4.0 0 20
+evolve.max_villager_radius (Max villager assignment radius) int 128 8 256
+evolve.max_villager_count (Max villagers per command) int 64 1 128
+evolve.max_evolve_villager_radius (Max Evolve villager populate radius) int 128 4 512
+evolve.max_evolve_villager_count (Max Evolve villagers per command) int 64 1 256
+evolve.evolve_villagers_ambient_enable (Evolve villagers magically appear near players) bool true
+evolve.evolve_villagers_ambient_interval (Evolve villager ambient spawn interval) float 75 5 600
+evolve.evolve_villagers_ambient_nearby_limit (Max ambient Evolve villagers near each player) int 2 0 16
+evolve.evolve_villagers_teleport_min_time (Evolve villager min hang around seconds) float 90 10 3600
+evolve.evolve_villagers_teleport_max_time (Evolve villager max hang around seconds) float 180 10 7200
+evolve.max_charm_scatter_radius (Max Wonder Charm collectible scatter radius) int 256 8 1000
+evolve.max_charm_scatter_count (Max Wonder Charm collectible scatter count) int 256 1 1000
+evolve.max_mushroom_kingdom_area (Max Mushroom Kingdom area radius) int 64 12 128
+evolve.max_beautify_radius (Max beautify radius) int 80 4 256
+evolve.max_animal_radius (Max animal populate radius) int 160 4 512
+evolve.max_animal_count (Max animals per populate command) int 80 1 500
+evolve.undo_depth (Undo entries per player) int 20 0 100
+evolve.require_confirm_volume (Confirm above this volume) int 20000 1 1000000
+evolve.max_structure_size (Max generated structure size) int 128 8 256
+evolve.max_treasure_tier (Max treasure tier) int 3 1 5
+evolve.max_treasure_radius (Max random treasure scatter radius) int 256 4 1000
+evolve.max_treasure_count (Max random treasure scatter count) int 80 1 500
+evolve_magic_enable (Enable magical power-ups) bool true
+evolve_magic_particles (Enable magical particles) bool true
+evolve_magic_permanent_flowers (Permanent flower steps) bool true
+evolve_magic_cloud_wand (Enable Cloud Wand) bool true
+evolve_magic_max_clouds_per_player (Max temporary cloud nodes per player) int 30 0 200
+evolve_magic_collectibles (Enable charm powers from collected items) bool true
+evolve_magic_consume_collectibles (Consume collectible trigger items) bool true
+evolve_magic_collectible_items (Extra collectible item mappings) string
+evolve_magic_tiny_collision (Tiny Charm changes collision box) bool false
+evolve_magic_treasure_twinkle (Enable Treasure Twinkle) bool true
+evolve_magic_animal_bell (Enable Animal Bell) bool true

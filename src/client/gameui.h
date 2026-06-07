@@ -8,6 +8,7 @@
 #include "irrlichttypes.h"
 #include <IGUIEnvironment.h>
 #include <memory>
+#include <string>
 #include "game.h"
 #include "gui/statusTextHelper.h"
 
@@ -51,7 +52,8 @@ public:
 	void init();
 	void update(const RunStats &stats, Client *client, MapDrawControl *draw_control,
 			const CameraOrientation &cam, const PointedThing &pointed_old,
-			const GUIChatConsole *chat_console, float dtime);
+			const GUIChatConsole *chat_console, float dtime,
+			const std::string &joystick_debug);
 
 	void initFlags();
 	const Flags &getFlags() const { return m_flags; }

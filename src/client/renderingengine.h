@@ -11,6 +11,7 @@
 #include "client/inputhandler.h"
 #include "debug.h"
 #include "config.h"
+#include "porting.h"
 #include "client/shader.h"
 #include "client/render/core.h"
 // include the shadow mapper classes too
@@ -137,6 +138,14 @@ public:
 
 	bool run()
 	{
+#if defined(__SWITCH__)
+		if (!porting::switchProcessAppEvents())
+			return false;
+		if (!porting::switchIsForeground()) {
+			sleep_ms(100);
+			return true;
+		}
+#endif
 		return m_device->run();
 	}
 

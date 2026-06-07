@@ -19,6 +19,7 @@ public:
 
 	bool update(const std::string &name, std::string_view data);
 	bool load(const std::string &name, std::ostream &os);
+	bool load(const std::string &name, std::string &data);
 	bool exists(const std::string &name);
 
 	// Copy another file on disk into the cache

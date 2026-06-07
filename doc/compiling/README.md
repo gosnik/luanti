@@ -3,6 +3,7 @@
 - [Compiling on GNU/Linux](linux.md)
 - [Compiling on Windows](windows.md)
 - [Compiling on MacOS](macos.md)
+- [Compiling for Nintendo Switch Homebrew](switch.md)
 
 
 ## CMake options
@@ -15,6 +16,9 @@ General options and their default values:
     BUILD_BENCHMARKS=FALSE     - Build benchmark sources
     BUILD_DOCUMENTATION=TRUE   - Build doxygen documentation
     CMAKE_BUILD_TYPE=Release   - Type of build (optimizaton level, debug information)
+    LOCKDOWN_CLIENT=FALSE      - Lock the client to one private server
+    LOCKDOWN_SERVER_NAME=       - Hostname/address for locked clients
+    LOCKDOWN_SERVER_PORT=30000  - Port for locked clients
         Release                - Release build
         Debug                  - Debug build
         SemiDebug              - Partially optimized debug build
@@ -46,6 +50,10 @@ General options and their default values:
     BUILD_WITH_TRACY=FALSE     - Fetch and build with the Tracy profiler client
     FETCH_TRACY_GIT_TAG=master - Git tag for fetching Tracy client. Match with your server (gui) version
     VERSION_EXTRA=             - Text to append to version (e.g. VERSION_EXTRA=foobar -> Luanti 5.10.0-foobar)
+
+The `LOCKDOWN_*` options apply to all client builds, including Linux, Windows,
+Android, and Nintendo Switch. Android exposes them as Gradle properties; see
+`doc/android.md`.
 
 Library specific options:
 

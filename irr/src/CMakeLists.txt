@@ -66,6 +66,9 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
 	set(SOLARIS TRUE)
 endif()
+if(LUANTI_SWITCH)
+	add_compile_definitions(__SWITCH__ LUANTI_SWITCH _IRR_POSIX_API_)
+endif()
 
 # Device
 
@@ -93,12 +96,12 @@ endif()
 
 # OpenGL (ES)
 
-if(NOT ANDROID)
+if(NOT ANDROID AND NOT LUANTI_SWITCH)
 	set(DEFAULT_OPENGL3 TRUE)
 endif()
 option(ENABLE_OPENGL3 "Enable OpenGL 3+" ${DEFAULT_OPENGL3})
 
-if(ANDROID OR EMSCRIPTEN)
+if(ANDROID OR EMSCRIPTEN OR LUANTI_SWITCH)
 	set(ENABLE_OPENGL FALSE)
 else()
 	option(ENABLE_OPENGL "Enable legacy OpenGL" TRUE)
@@ -108,7 +111,7 @@ if(APPLE)
 	set(ENABLE_GLES2 FALSE)
 	set(ENABLE_WEBGL1 FALSE)
 else()
-	if(ANDROID OR EMSCRIPTEN)
+	if(ANDROID OR EMSCRIPTEN OR LUANTI_SWITCH)
 		set(DEFAULT_GLES2 TRUE)
 	endif()
 	if(EMSCRIPTEN)
@@ -206,8 +209,12 @@ int main() {}" CHECK_SDL_VERSION)
 	endif()
 
 	# ...no target either.
-	if(NOT TARGET SDL2::SDL2)
-		add_library(SDL2::SDL2 SHARED IMPORTED)
+	if(USE_SDL2_STATIC AND NOT TARGET SDL2::SDL2-static)
+		add_library(SDL2::SDL2-static UNKNOWN IMPORTED)
+		set_target_properties(SDL2::SDL2-static PROPERTIES
+			IMPORTED_LOCATION "${SDL2_LIBRARIES}")
+	elseif(NOT USE_SDL2_STATIC AND NOT TARGET SDL2::SDL2)
+		add_library(SDL2::SDL2 UNKNOWN IMPORTED)
 		set_target_properties(SDL2::SDL2 PROPERTIES
 			IMPORTED_LOCATION "${SDL2_LIBRARIES}")
 	endif()
@@ -516,6 +523,7 @@ target_link_libraries(IrrlichtMt PRIVATE
 
 	# incl. transitive SDL2 dependencies for static linking
 	"$<$<PLATFORM_ID:Android>:-landroid -llog -lGLESv2 -lGLESv1_CM -lOpenSLES>"
+	"$<$<BOOL:${LUANTI_SWITCH}>:-lEGL -lGLESv2 -lglapi -ldrm_nouveau -lnx>"
 )
 
 if(WIN32)

@@ -24,6 +24,17 @@
 	#include <sys/endian.h>
 #elif HAVE_ENDIAN_H
 	#include <endian.h>
+#elif defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+		defined(__ORDER_BIG_ENDIAN__)
+	#ifndef BYTE_ORDER
+		#define BYTE_ORDER __BYTE_ORDER__
+	#endif
+	#ifndef LITTLE_ENDIAN
+		#define LITTLE_ENDIAN __ORDER_LITTLE_ENDIAN__
+	#endif
+	#ifndef BIG_ENDIAN
+		#define BIG_ENDIAN __ORDER_BIG_ENDIAN__
+	#endif
 #else
 	#error "Can't detect endian (missing header)"
 #endif

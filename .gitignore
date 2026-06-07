@@ -68,6 +68,8 @@ AppDir
 /sounds
 /mods/*
 !/mods/mods_here.txt
+!/mods/evolve/
+!/mods/evolve/**
 /worlds/*
 !/worlds/worlds_here.txt
 /clientmods/*

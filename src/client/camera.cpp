@@ -648,10 +648,24 @@ void Camera::toggleCameraMode()
 {
 	if (m_camera_mode == CAMERA_MODE_FIRST)
 		m_camera_mode = CAMERA_MODE_THIRD;
+#if defined(__SWITCH__)
+	else
+		m_camera_mode = CAMERA_MODE_FIRST;
+#else
 	else if (m_camera_mode == CAMERA_MODE_THIRD)
 		m_camera_mode = CAMERA_MODE_THIRD_FRONT;
 	else
 		m_camera_mode = CAMERA_MODE_FIRST;
+#endif
+}
+
+void Camera::setCameraMode(CameraMode mode)
+{
+#if defined(__SWITCH__)
+	if (mode == CAMERA_MODE_THIRD_FRONT)
+		mode = CAMERA_MODE_FIRST;
+#endif
+	m_camera_mode = mode;
 }
 
 void Camera::drawNametags()

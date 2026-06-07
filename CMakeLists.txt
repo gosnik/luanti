@@ -7,6 +7,19 @@ endif()
 project(luanti)
 set(PROJECT_NAME_CAPITALIZED "Luanti")
 
+if(LUANTI_SWITCH)
+	set(CMAKE_EXECUTABLE_SUFFIX ".elf")
+	add_compile_definitions(__SWITCH__ LUANTI_SWITCH)
+	add_compile_options(
+		-march=armv8-a+crc+crypto
+		-mtune=cortex-a57
+		-mtp=soft
+		-ffunction-sections
+		-fdata-sections
+		-fPIE
+	)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(GCC_MINIMUM_VERSION "7.5")
@@ -36,9 +49,33 @@ endif()
 # Configuration options
 set(BUILD_CLIENT TRUE CACHE BOOL "Build client")
 set(BUILD_SERVER FALSE CACHE BOOL "Build server")
-set(BUILD_UNITTESTS TRUE CACHE BOOL "Build unittests")
+set(LOCKDOWN_CLIENT FALSE CACHE BOOL "Lock the client to one private server")
+set(LOCKDOWN_SERVER_NAME "" CACHE STRING "Private server hostname/address for locked clients")
+set(LOCKDOWN_SERVER_PORT "30000" CACHE STRING "Private server port for locked clients")
+set(DEFAULT_LOCKDOWN_TRUST_MEDIA_CACHE ${LOCKDOWN_CLIENT})
+set(LOCKDOWN_TRUST_MEDIA_CACHE ${DEFAULT_LOCKDOWN_TRUST_MEDIA_CACHE} CACHE BOOL
+	"Trust hash-named media cache files without re-hashing them")
+if(NOT LOCKDOWN_SERVER_PORT MATCHES "^[0-9]+$")
+	message(FATAL_ERROR "LOCKDOWN_SERVER_PORT must be numeric")
+endif()
+if(LOCKDOWN_SERVER_PORT LESS 1 OR LOCKDOWN_SERVER_PORT GREATER 65535)
+	message(FATAL_ERROR "LOCKDOWN_SERVER_PORT must be between 1 and 65535")
+endif()
+if(LOCKDOWN_CLIENT AND LOCKDOWN_SERVER_NAME STREQUAL "")
+	message(FATAL_ERROR "LOCKDOWN_CLIENT requires LOCKDOWN_SERVER_NAME to be set")
+endif()
+set(LOCKDOWN_SERVER_NAME_ESCAPED "${LOCKDOWN_SERVER_NAME}")
+string(REPLACE "\\" "\\\\" LOCKDOWN_SERVER_NAME_ESCAPED "${LOCKDOWN_SERVER_NAME_ESCAPED}")
+string(REPLACE "\"" "\\\"" LOCKDOWN_SERVER_NAME_ESCAPED "${LOCKDOWN_SERVER_NAME_ESCAPED}")
+set(DEFAULT_BUILD_UNITTESTS TRUE)
+set(DEFAULT_BUILD_DOCUMENTATION TRUE)
+if(LUANTI_SWITCH)
+	set(DEFAULT_BUILD_UNITTESTS FALSE)
+	set(DEFAULT_BUILD_DOCUMENTATION FALSE)
+endif()
+set(BUILD_UNITTESTS ${DEFAULT_BUILD_UNITTESTS} CACHE BOOL "Build unittests")
 set(BUILD_BENCHMARKS FALSE CACHE BOOL "Build benchmarks")
-set(BUILD_DOCUMENTATION TRUE CACHE BOOL "Build documentation")
+set(BUILD_DOCUMENTATION ${DEFAULT_BUILD_DOCUMENTATION} CACHE BOOL "Build documentation")
 
 set(DEFAULT_ENABLE_LTO TRUE)
 # by default don't enable on Debug builds to get faster builds
@@ -68,6 +105,9 @@ set(DEFAULT_RUN_IN_PLACE FALSE)
 if(WIN32)
 	set(DEFAULT_RUN_IN_PLACE TRUE)
 endif()
+if(LUANTI_SWITCH)
+	set(DEFAULT_RUN_IN_PLACE TRUE)
+endif()
 set(RUN_IN_PLACE ${DEFAULT_RUN_IN_PLACE} CACHE BOOL
 	"Run directly in source directory structure")
 
@@ -77,6 +117,12 @@ message(STATUS "BUILD_SERVER: " ${BUILD_SERVER})
 message(STATUS "BUILD_UNITTESTS: " ${BUILD_UNITTESTS})
 message(STATUS "BUILD_BENCHMARKS: " ${BUILD_BENCHMARKS})
 message(STATUS "BUILD_DOCUMENTATION: " ${BUILD_DOCUMENTATION})
+message(STATUS "LOCKDOWN_CLIENT: " ${LOCKDOWN_CLIENT})
+if(LOCKDOWN_CLIENT)
+	message(STATUS "LOCKDOWN_SERVER_NAME: " ${LOCKDOWN_SERVER_NAME})
+	message(STATUS "LOCKDOWN_SERVER_PORT: " ${LOCKDOWN_SERVER_PORT})
+endif()
+message(STATUS "LOCKDOWN_TRUST_MEDIA_CACHE: " ${LOCKDOWN_TRUST_MEDIA_CACHE})
 message(STATUS "RUN_IN_PLACE: " ${RUN_IN_PLACE})
 
 set(WARN_ALL TRUE CACHE BOOL "Enable -Wall for Release build")
@@ -141,7 +187,13 @@ endif()
 
 # Installation
 
-if(WIN32)
+if(LUANTI_SWITCH)
+	set(SHAREDIR ".")
+	set(BINDIR ".")
+	set(DOCDIR "doc")
+	set(EXAMPLE_CONF_DIR ".")
+	set(LOCALEDIR "locale")
+elseif(WIN32)
 	set(SHAREDIR ".")
 	set(BINDIR "bin")
 	set(DOCDIR "doc")
@@ -254,15 +306,17 @@ if(BUILD_CLIENT)
 	endif()
 endif()
 
-install(FILES "README.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
-install(FILES "doc/lua_api.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
-install(FILES "doc/client_lua_api.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
-install(FILES "doc/menu_lua_api.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
-install(FILES "doc/texture_packs.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
-install(FILES "doc/world_format.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
+if(BUILD_DOCUMENTATION)
+	install(FILES "README.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
+	install(FILES "doc/lua_api.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
+	install(FILES "doc/client_lua_api.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
+	install(FILES "doc/menu_lua_api.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
+	install(FILES "doc/texture_packs.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
+	install(FILES "doc/world_format.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
+endif()
 install(FILES "minetest.conf.example" DESTINATION "${EXAMPLE_CONF_DIR}")
 
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT LUANTI_SWITCH)
 	install(FILES "doc/luanti.6" "doc/luantiserver.6" DESTINATION "${MANDIR}/man6")
 	install(FILES "misc/org.luanti.luanti.desktop" DESTINATION "${XDG_APPS_DIR}")
 	install(FILES "misc/org.luanti.luanti.metainfo.xml" DESTINATION "${METAINFODIR}")
@@ -300,6 +354,22 @@ add_subdirectory(lib/tiniergltf)
 # Subdirectories
 # Be sure to add all relevant definitions above this
 add_subdirectory(src)
+
+if(LUANTI_SWITCH AND BUILD_CLIENT)
+	find_package(SDL2 REQUIRED)
+	add_executable(luanti_switch_smoke util/switch/smoke_render.cpp)
+	target_include_directories(luanti_switch_smoke PRIVATE ${SDL2_INCLUDE_DIRS})
+	target_compile_definitions(luanti_switch_smoke PRIVATE __SWITCH__ LUANTI_SWITCH)
+	target_link_libraries(luanti_switch_smoke PRIVATE
+		${SDL2_LIBRARIES}
+		EGL
+		GLESv2
+		glapi
+		drm_nouveau
+		nx
+		m
+	)
+endif()
 
 # Package generation
 

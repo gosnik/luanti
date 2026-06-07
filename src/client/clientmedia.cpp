@@ -3,6 +3,7 @@
 // Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include "clientmedia.h"
+#include "cmake_config.h"
 #include "gettext.h"
 #include "httpfetch.h"
 #include "client.h"
@@ -15,6 +16,8 @@
 #include "util/serialize.h"
 #include "util/hashing.h"
 #include "util/string.h"
+#include <cmath>
+#include <cstdio>
 #include <sstream>
 
 static std::string getMediaCacheDir()
@@ -22,12 +25,32 @@ static std::string getMediaCacheDir()
 	return porting::path_cache + DIR_DELIM + "media";
 }
 
+#if defined(__SWITCH__)
+static void switchMediaTrace(const char *message)
+{
+	porting::switchDebugTrace(message);
+}
+#else
+static void switchMediaTrace(const char *)
+{
+}
+#endif
+
 bool clientMediaUpdateCache(const std::string &raw_hash, const std::string &filedata)
 {
 	FileCache media_cache(getMediaCacheDir());
 	std::string sha1_hex = hex_encode(raw_hash);
-	if (!media_cache.exists(sha1_hex))
-		return media_cache.update(sha1_hex, filedata);
+	if (!media_cache.exists(sha1_hex)) {
+		bool ok = media_cache.update(sha1_hex, filedata);
+#if defined(__SWITCH__)
+		char message[192];
+		std::snprintf(message, sizeof(message),
+			"media cache dynamic write: hash=%s bytes=%zu ok=%d",
+			sha1_hex.c_str(), filedata.size(), ok ? 1 : 0);
+		switchMediaTrace(message);
+#endif
+		return ok;
+	}
 	return false;
 }
 
@@ -35,8 +58,17 @@ bool clientMediaUpdateCacheCopy(const std::string &raw_hash, const std::string &
 {
 	FileCache media_cache(getMediaCacheDir());
 	std::string sha1_hex = hex_encode(raw_hash);
-	if (!media_cache.exists(sha1_hex))
-		return media_cache.updateCopyFile(sha1_hex, path);
+	if (!media_cache.exists(sha1_hex)) {
+		bool ok = media_cache.updateCopyFile(sha1_hex, path);
+#if defined(__SWITCH__)
+		char message[192];
+		std::snprintf(message, sizeof(message),
+			"media cache copy: hash=%s ok=%d path='%.96s'",
+			sha1_hex.c_str(), ok ? 1 : 0, path.c_str());
+		switchMediaTrace(message);
+#endif
+		return ok;
+	}
 	return false;
 }
 
@@ -183,9 +215,14 @@ void ClientMediaDownloader::initialStep(Client *client)
 	// Tradeoff between responsiveness during media loading and media loading speed
 	const u64 chunk_time_ms = 33;
 	u64 last_time = porting::getTimeMs();
+	u64 start_time = last_time;
 
 	// Check media cache
 	m_uncached_count = m_files.size();
+	m_media_count = m_files.size();
+	m_media_loaded_count = 0;
+	s32 total_count = m_uncached_count;
+	s32 cached_count = 0;
 	for (auto &file_it : m_files) {
 		const std::string &name = file_it.first;
 		FileStatus *filestatus = file_it.second;
@@ -194,15 +231,34 @@ void ClientMediaDownloader::initialStep(Client *client)
 		if (tryLoadFromCache(name, sha1, client)) {
 			filestatus->received = true;
 			m_uncached_count--;
+			m_media_loaded_count++;
+			cached_count++;
 		}
 
 		u64 cur_time = porting::getTimeMs();
 		u64 dtime = porting::getDeltaMs(last_time, cur_time);
 		if (dtime >= chunk_time_ms) {
-			client->drawLoadScreen(loading_text, dtime / 1000.0f, 30);
+			client->drawLoadScreen(loading_text, dtime / 1000.0f,
+				30 + std::ceil(getProgress() * 35 + 0.5f));
 			last_time = cur_time;
 		}
 	}
+
+	u64 cache_scan_ms = porting::getDeltaMs(start_time, porting::getTimeMs());
+	infostream << "Client: Media cache scan found " << cached_count << "/"
+		<< total_count << " files in " << cache_scan_ms << " ms at "
+		<< getMediaCacheDir() << std::endl;
+#if defined(__SWITCH__)
+	{
+		char message[192];
+		std::snprintf(message, sizeof(message),
+			"media cache scan: total=%d hits=%d misses=%d ms=%llu dir='%.80s'",
+			total_count, cached_count, m_uncached_count,
+			static_cast<unsigned long long>(cache_scan_ms),
+			getMediaCacheDir().c_str());
+		switchMediaTrace(message);
+	}
+#endif
 
 	assert(m_uncached_received_count == 0);
 
@@ -350,6 +406,8 @@ void ClientMediaDownloader::remoteMediaReceived(
 			filestatus->received = true;
 			assert(m_uncached_received_count < m_uncached_count);
 			m_uncached_received_count++;
+			assert(m_media_loaded_count < m_media_count);
+			m_media_loaded_count++;
 		}
 	}
 }
@@ -467,6 +525,15 @@ void ClientMediaDownloader::startConventionalTransfers(Client *client)
 		}
 		assert((s32) file_requests.size() ==
 				m_uncached_count - m_uncached_received_count);
+#if defined(__SWITCH__)
+		{
+			char message[128];
+			std::snprintf(message, sizeof(message),
+				"media conventional request: files=%zu",
+				file_requests.size());
+			switchMediaTrace(message);
+		}
+#endif
 		client->request_media(file_requests);
 	}
 }
@@ -501,6 +568,8 @@ bool ClientMediaDownloader::conventionalTransferDone(
 	filestatus->received = true;
 	assert(m_uncached_received_count < m_uncached_count);
 	m_uncached_received_count++;
+	assert(m_media_loaded_count < m_media_count);
+	m_media_loaded_count++;
 
 	// Check that received file matches announced checksum
 	// If so, load it
@@ -521,12 +590,12 @@ IClientMediaDownloader::IClientMediaDownloader():
 bool IClientMediaDownloader::tryLoadFromCache(const std::string &name,
 	const std::string &sha1, Client *client)
 {
-	std::ostringstream tmp_os(std::ios_base::binary);
-	bool found_in_cache = m_media_cache.load(hex_encode(sha1), tmp_os);
+	std::string data;
+	bool found_in_cache = m_media_cache.load(hex_encode(sha1), data);
 
 	// If found in cache, try to load it from there
 	if (found_in_cache)
-		return checkAndLoad(name, sha1, tmp_os.str(), true, client);
+		return checkAndLoad(name, sha1, data, true, client);
 
 	return false;
 }
@@ -539,18 +608,26 @@ bool IClientMediaDownloader::checkAndLoad(
 	const char *cached_or_received_uc = is_from_cache ? "Cached" : "Received";
 	std::string sha1_hex = hex_encode(sha1);
 
-	// Compute actual checksum of data
-	std::string data_sha1 = hashing::sha1(data);
+#if LOCKDOWN_TRUST_MEDIA_CACHE
+	if (is_from_cache) {
+		verbosestream << "Client: Trusting cached media file "
+			<< sha1_hex << " \"" << name << "\"" << std::endl;
+	} else
+#endif
+	{
+		// Compute actual checksum of data
+		std::string data_sha1 = hashing::sha1(data);
 
-	// Check that received file matches announced checksum
-	if (data_sha1 != sha1) {
-		std::string data_sha1_hex = hex_encode(data_sha1);
-		infostream << "Client: "
-			<< cached_or_received_uc << " media file "
-			<< sha1_hex << " \"" << name << "\" "
-			<< "mismatches actual checksum " << data_sha1_hex
-			<< std::endl;
-		return false;
+		// Check that received file matches announced checksum
+		if (data_sha1 != sha1) {
+			std::string data_sha1_hex = hex_encode(data_sha1);
+			infostream << "Client: "
+				<< cached_or_received_uc << " media file "
+				<< sha1_hex << " \"" << name << "\" "
+				<< "mismatches actual checksum " << data_sha1_hex
+				<< std::endl;
+			return false;
+		}
 	}
 
 	// Checksum is ok, try loading the file
@@ -569,8 +646,21 @@ bool IClientMediaDownloader::checkAndLoad(
 		<< std::endl;
 
 	// Update cache (unless we just loaded the file from the cache)
-	if (!is_from_cache && m_write_to_cache)
-		m_media_cache.update(sha1_hex, data);
+	if (!is_from_cache && m_write_to_cache) {
+		bool cache_ok = m_media_cache.update(sha1_hex, data);
+		if (!cache_ok) {
+			warningstream << "Client: Failed to write media cache file "
+				<< sha1_hex << " \"" << name << "\" at "
+				<< getMediaCacheDir() << std::endl;
+		}
+#if defined(__SWITCH__)
+		char message[192];
+		std::snprintf(message, sizeof(message),
+			"media cache write: hash=%s name='%.64s' bytes=%zu ok=%d",
+			sha1_hex.c_str(), name.c_str(), data.size(), cache_ok ? 1 : 0);
+		switchMediaTrace(message);
+#endif
+	}
 
 	return true;
 }

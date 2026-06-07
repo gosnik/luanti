@@ -1,0 +1,50 @@
+osSpecificInit: begin
+osSpecificInit: socketInitializeDefault ok
+osSpecificInit: romfsInit ok
+osSpecificInit: applet exit locked
+osSpecificInit: end
+main: osSpecificInit complete
+main: env opts loaded
+main: command line parsed
+main: log params setup complete
+setSystemPaths: begin
+setSystemPaths: user dir ok
+setSystemPaths: share path romfs
+setSystemPaths: cache dir ok
+setSystemPaths: worlds dir ok
+setSystemPaths: screenshots dir ok
+setSystemPaths: client dir ok
+setSystemPaths: end ok
+main: initializePaths complete
+main: create_userdata_path complete
+init_common: settings layers created
+init_common: config loaded
+init_common: settings migrated
+init_common: log streams initialized
+main: init_common complete
+main: game_configure complete
+main: starting ClientLauncher
+ClientLauncher::run: begin
+ClientLauncher::run: init_args complete
+ClientLauncher::run: init_engine complete
+ClientLauncher::run: top level window setup complete
+ClientLauncher::run: input initialized
+ClientLauncher::run: gui env configured
+ClientLauncher::run: font engine complete
+ClientLauncher::run: menu clouds complete
+ClientLauncher::run: entering menu-game loop
+ClientLauncher::run: loop iteration begin
+ClientLauncher::run: launch_game requested game
+ClientLauncher::run: starting game
+ClientLauncher::run: game returned
+ClientLauncher::run: loop iteration begin
+ClientLauncher::run: launch_game requested game
+ClientLauncher::run: starting game
+ClientLauncher::run: game returned
+ClientLauncher::run: loop iteration begin
+ClientLauncher::run: launch_game returned false
+ClientLauncher::run: returning to main menu
+ClientLauncher::run: returning true
+main: ClientLauncher returned success
+main: returning from main
+cleanupSwitch: begin

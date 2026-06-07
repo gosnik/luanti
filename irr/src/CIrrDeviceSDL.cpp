@@ -338,6 +338,11 @@ Keycode CIrrDeviceSDL::getKeyFromScancode(const u32 scancode) const
 
 void CIrrDeviceSDL::resetReceiveTextInputEvents()
 {
+#ifdef __SWITCH__
+	SDL_StopTextInput(Window);
+	return;
+#endif
+
 	gui::IGUIElement *elem = GUIEnvironment->getFocus();
 	if (elem && elem->acceptsIME()) {
 		// IBus seems to have an issue where dead keys and compose keys do not

@@ -132,6 +132,30 @@
 #define htobe32(x) ntohl((x))
 #endif /* _WIN32 && !HAVE_ENDIAN_H */
 
+#if !defined(HAVE_ENDIAN_H) && !defined(be32toh) && \
+		defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+		defined(__ORDER_BIG_ENDIAN__)
+#define LITTLE_ENDIAN 1234
+#define BIG_ENDIAN 4321
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define BYTE_ORDER LITTLE_ENDIAN
+#define be16toh(x) __builtin_bswap16((uint16_t)(x))
+#define htobe16(x) __builtin_bswap16((uint16_t)(x))
+#define le32toh(x) ((uint32_t)(x))
+#define be32toh(x) __builtin_bswap32((uint32_t)(x))
+#define htole32(x) ((uint32_t)(x))
+#define htobe32(x) __builtin_bswap32((uint32_t)(x))
+#else
+#define BYTE_ORDER BIG_ENDIAN
+#define be16toh(x) ((uint16_t)(x))
+#define htobe16(x) ((uint16_t)(x))
+#define le32toh(x) __builtin_bswap32((uint32_t)(x))
+#define be32toh(x) ((uint32_t)(x))
+#define htole32(x) __builtin_bswap32((uint32_t)(x))
+#define htobe32(x) ((uint32_t)(x))
+#endif
+#endif
+
 #ifdef __linux__
 #if !defined(betoh16)
 #define betoh16(x) be16toh(x)

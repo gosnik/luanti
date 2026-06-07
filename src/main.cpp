@@ -138,12 +138,22 @@ int main(int argc, char *argv[])
 	g_logger.addOutputMaxLevel(&stderr_output, LL_ACTION);
 
 	porting::osSpecificInit();
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("main: osSpecificInit complete");
+#endif
 
 	int non_test_argc = get_non_test_argc(argc, argv);
 
 	Settings cmd_args;
 	get_env_opts(cmd_args);
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("main: env opts loaded");
+#endif
 	bool cmd_args_ok = get_cmdline_opts(non_test_argc, argv, &cmd_args);
+#if defined(__SWITCH__)
+	porting::switchDebugTrace(cmd_args_ok ?
+		"main: command line parsed" : "main: command line parse failed");
+#endif
 	if (!cmd_args_ok
 			|| cmd_args.getFlag("help")
 			|| cmd_args.exists("nonopt1")) {
@@ -165,6 +175,9 @@ int main(int argc, char *argv[])
 
 	if (!setup_log_params(cmd_args))
 		return 1;
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("main: log params setup complete");
+#endif
 
 	if (cmd_args.getFlag("debugger")) {
 		if (!use_debugger(argc, argv))
@@ -186,11 +199,20 @@ int main(int argc, char *argv[])
 
 	porting::signal_handler_init();
 	porting::initializePaths();
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("main: initializePaths complete");
+#endif
 
 	if (!create_userdata_path()) {
 		errorstream << "Cannot create user data directory" << std::endl;
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("main: create_userdata_path failed");
+#endif
 		return 1;
 	}
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("main: create_userdata_path complete");
+#endif
 
 	// List gameids if requested
 	if (cmd_args.exists("gameid") && cmd_args.get("gameid") == "list") {
@@ -214,8 +236,15 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	if (!init_common(cmd_args, argc, argv))
+	if (!init_common(cmd_args, argc, argv)) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("main: init_common failed");
+#endif
 		return 1;
+	}
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("main: init_common complete");
+#endif
 
 	if (g_settings->getBool("enable_console"))
 		porting::attachOrCreateConsole();
@@ -273,16 +302,35 @@ int main(int argc, char *argv[])
 	game_params.is_dedicated_server = isServer;
 #endif
 
-	if (!game_configure(&game_params, cmd_args))
+	if (!game_configure(&game_params, cmd_args)) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("main: game_configure failed");
+#endif
 		return 1;
+	}
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("main: game_configure complete");
+#endif
 
 	sanity_check(!game_params.world_path.empty());
 
-	if (game_params.is_dedicated_server)
+	if (game_params.is_dedicated_server) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("main: running dedicated server");
+#endif
 		return run_dedicated_server(game_params, cmd_args) ? 0 : 1;
+	}
 
 #if CHECK_CLIENT_BUILD()
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("main: starting ClientLauncher");
+#endif
 	retval = ClientLauncher().run(game_params, cmd_args) ? 0 : 1;
+#if defined(__SWITCH__)
+	porting::switchDebugTrace(retval == 0 ?
+		"main: ClientLauncher returned success" :
+		"main: ClientLauncher returned failure");
+#endif
 #else
 	retval = 0;
 #endif
@@ -295,6 +343,9 @@ int main(int argc, char *argv[])
 
 	END_DEBUG_EXCEPTION_HANDLER
 
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("main: returning from main");
+#endif
 	return retval;
 }
 
@@ -668,7 +719,7 @@ namespace {
 
 static bool use_debugger(int argc, char *argv[])
 {
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__SWITCH__)
 	return false;
 #else
 #ifdef _WIN32
@@ -760,16 +811,32 @@ static bool init_common(const Settings &cmd_args, int argc, char *argv[])
 	// Initialize g_settings
 	set_default_settings();
 	Settings::createLayer(SL_GLOBAL);
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("init_common: settings layers created");
+#endif
 
 	// Set cleanup callback(s) to run at process exit
 	atexit(uninit_common);
 
-	if (!read_config_file(cmd_args))
+	if (!read_config_file(cmd_args)) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("init_common: read_config_file failed");
+#endif
 		return false;
+	}
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("init_common: config loaded");
+#endif
 
 	migrate_settings();
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("init_common: settings migrated");
+#endif
 
 	init_log_streams(cmd_args);
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("init_common: log streams initialized");
+#endif
 
 	// Initialize random seed
 	u64 seed;

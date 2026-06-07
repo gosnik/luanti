@@ -11,6 +11,7 @@ GAMEBAR_OFFSET_TOUCH = 0.15
 
 local menupath = core.get_mainmenu_path()
 local basepath = core.get_builtin_path()
+lockdown_info = core.get_lockdown_info()
 defaulttexturedir = core.get_texturepath_share() .. DIR_DELIM .. "base" ..
 					DIR_DELIM .. "pack" .. DIR_DELIM
 
@@ -76,6 +77,10 @@ local function init_globals()
 
 	-- Init gamedata
 	gamedata.worldindex = 0
+	if lockdown_info.enabled then
+		core.settings:set("address", lockdown_info.server_name)
+		core.settings:set("remote_port", lockdown_info.server_port)
+	end
 
 	menudata.worldlist = filterlist.create(
 		core.get_worlds,
@@ -110,31 +115,37 @@ local function init_globals()
 	local tv_main = tabview_create("maintab", {x = MAIN_TAB_W, y = MAIN_TAB_H}, {x = 0, y = 0})
 
 	tv_main:set_autosave_tab(true)
-	tv_main:add(tabs.local_game)
+	if not lockdown_info.enabled then
+		tv_main:add(tabs.local_game)
+	end
 	tv_main:add(tabs.play_online)
-	tv_main:add(tabs.content)
+	if not lockdown_info.enabled then
+		tv_main:add(tabs.content)
+	end
 	tv_main:add(tabs.about)
 
 	tv_main:set_global_event_handler(main_event_handler)
 	tv_main:set_fixed_size(false)
 
-	local last_tab = core.settings:get("maintab_LAST")
+	local last_tab = lockdown_info.enabled and "online" or core.settings:get("maintab_LAST")
 	if last_tab and tv_main.current_tab ~= last_tab then
 		tv_main:set_tab(last_tab)
 	end
 
-	tv_main:set_end_button({
-		icon = defaulttexturedir .. "settings_btn.png",
-		label = fgettext("Settings"),
-		name = "open_settings",
-		on_click = function(tabview)
-			local dlg = create_settings_dlg()
-			dlg:set_parent(tabview)
-			tabview:hide()
-			dlg:show()
-			return true
-		end,
-	})
+	if not lockdown_info.enabled then
+		tv_main:set_end_button({
+			icon = defaulttexturedir .. "settings_btn.png",
+			label = fgettext("Settings"),
+			name = "open_settings",
+			on_click = function(tabview)
+				local dlg = create_settings_dlg()
+				dlg:set_parent(tabview)
+				tabview:hide()
+				dlg:show()
+				return true
+			end,
+		})
+	end
 
 	ui.set_default("maintab")
 	tv_main:show()
@@ -146,7 +157,9 @@ local function init_globals()
 	check_reinstall_mtg(parent)
 
 	-- asynchronous, will only be shown if we're still on "maintab"
-	check_new_version()
+	if not lockdown_info.enabled then
+		check_new_version()
+	end
 end
 
 assert(os.execute == nil)

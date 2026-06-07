@@ -17,14 +17,19 @@
 #include "gui/guiEngine.h"
 #include "fontengine.h"
 #include "clientlauncher.h"
+#include "config.h"
 #include "version.h"
 #include "renderingengine.h"
 #include "settings.h"
+#include "porting.h"
 #include "gettime.h"
 #include "util/numeric.h"
+#include "util/string.h"
 #include "util/tracy_wrapper.h"
 #include <IGUISpriteBank.h>
 #include <ICameraSceneNode.h>
+#include <cstdio>
+#include <map>
 #include <unordered_map>
 
 #if USE_SOUND
@@ -39,6 +44,68 @@ MainMenuManager g_menumgr;
 
 // Passed to menus to allow disconnecting and exiting
 MainGameCallback *g_gamecallback = nullptr;
+
+#if LOCKDOWN_CLIENT
+static std::string getNormalizedLockdownName()
+{
+	std::string name;
+	if (!g_settings->getNoEx("lockdown_playername", name) || name.empty())
+		name = g_settings->get("name");
+	return std::string(trim(name));
+}
+
+static void saveLockdownCredentials(const std::string &name,
+	const std::string &password)
+{
+	const std::string normalized_name(trim(name));
+	g_settings->set("name", normalized_name);
+	g_settings->set("lockdown_playername", normalized_name);
+	g_settings->set("lockdown_password", password);
+	bool saved = false;
+	if (!g_settings_path.empty()) {
+		saved = g_settings->updateConfigFileValues(g_settings_path.c_str(), {
+			{"name", normalized_name},
+			{"lockdown_playername", normalized_name},
+			{"lockdown_password", password},
+		});
+	}
+#if defined(__SWITCH__)
+	char message[160];
+	std::snprintf(message, sizeof(message),
+		"lockdown credentials saved: name='%s' valid_name=%d password=%s len=%zu file_saved=%d",
+		normalized_name.c_str(), is_valid_player_name(normalized_name) ? 1 : 0,
+		password.empty() ? "empty" : "set", password.size(), saved ? 1 : 0);
+	porting::switchDebugTrace(message);
+#endif
+}
+#endif
+
+static void applyLockdownServer(GameStartData &start_data)
+{
+#if LOCKDOWN_CLIENT
+	bool had_password = !start_data.password.empty();
+	start_data.address = LOCKDOWN_SERVER_NAME;
+	start_data.socket_port = LOCKDOWN_SERVER_PORT;
+	start_data.world_path.clear();
+	start_data.world_spec = WorldSpec();
+	start_data.local_server = false;
+	start_data.name = trim(start_data.name);
+	if (start_data.name.empty())
+		start_data.name = getNormalizedLockdownName();
+	if (start_data.password.empty())
+		start_data.password = g_settings->get("lockdown_password");
+#if defined(__SWITCH__)
+	char message[192];
+	std::snprintf(message, sizeof(message),
+		"lockdown: target=%s:%u name='%s' valid_name=%d password=%s len=%zu source=%s",
+		start_data.address.c_str(), start_data.socket_port,
+		start_data.name.c_str(), is_valid_player_name(start_data.name) ? 1 : 0,
+		start_data.password.empty() ? "empty" : "set",
+		start_data.password.size(), had_password ? "menu/cmd" : "saved/default");
+	porting::switchDebugTrace(message);
+#endif
+#endif
+}
 
 #if 0
 // This can be helpful for the next code cleanup
@@ -97,19 +164,34 @@ ClientLauncher::~ClientLauncher()
 
 bool ClientLauncher::run(GameStartData &start_data, const Settings &cmd_args)
 {
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("ClientLauncher::run: begin");
+#endif
 	init_args(start_data, cmd_args);
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("ClientLauncher::run: init_args complete");
+#endif
 
 	try {
 		init_engine();
 	} catch (BaseException &e) {
 		errorstream << e.what() << std::endl;
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("ClientLauncher::run: init_engine failed");
+#endif
 		RenderingEngine::showErrorMessageBox(e.what());
 		return false;
 	}
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("ClientLauncher::run: init_engine complete");
+#endif
 
 	sanity_check(m_rendering_engine->get_video_driver() != nullptr);
 
 	m_rendering_engine->setupTopLevelWindow();
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("ClientLauncher::run: top level window setup complete");
+#endif
 
 	// Create game callback for menus
 	g_gamecallback = new MainGameCallback();
@@ -118,12 +200,21 @@ bool ClientLauncher::run(GameStartData &start_data, const Settings &cmd_args)
 
 #if USE_SOUND
 	g_sound_manager_singleton = createSoundManagerSingleton();
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("ClientLauncher::run: sound manager complete");
+#endif
 #endif
 
 	init_input();
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("ClientLauncher::run: input initialized");
+#endif
 
 	guienv = m_rendering_engine->get_gui_env();
 	config_guienv();
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("ClientLauncher::run: gui env configured");
+#endif
 	g_settings->registerChangedCallback("dpi_change_notifier", setting_changed_callback, this);
 	g_settings->registerChangedCallback("display_density_factor", setting_changed_callback, this);
 	g_settings->registerChangedCallback("gui_scaling", setting_changed_callback, this);
@@ -133,9 +224,15 @@ bool ClientLauncher::run(GameStartData &start_data, const Settings &cmd_args)
 		g_fontengine = new FontEngine(guienv);
 	} catch (BaseException &e) {
 		errorstream << e.what() << std::endl;
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("ClientLauncher::run: font engine failed");
+#endif
 		RenderingEngine::showErrorMessageBox(e.what());
 		return false;
 	}
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("ClientLauncher::run: font engine complete");
+#endif
 
 	// Create the menu clouds
 	// This is only global so it can be used by RenderingEngine::draw_load_screen().
@@ -152,9 +249,15 @@ bool ClientLauncher::run(GameStartData &start_data, const Settings &cmd_args)
 		g_menuclouds = new Clouds(g_menucloudsmgr, ssrc.get(), -1, seed);
 	} catch (BaseException &e) {
 		errorstream << e.what() << std::endl;
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("ClientLauncher::run: menu clouds failed");
+#endif
 		RenderingEngine::showErrorMessageBox(e.what());
 		return false;
 	}
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("ClientLauncher::run: menu clouds complete");
+#endif
 	g_menuclouds->setHeight(100.0f);
 	g_menuclouds->update(v3f(0, 0, 0), m_rendering_engine->m_menu_clouds_color);
 	scene::ICameraSceneNode* camera;
@@ -180,8 +283,14 @@ bool ClientLauncher::run(GameStartData &start_data, const Settings &cmd_args)
 	bool retval         = true;
 	volatile auto *kill = porting::signal_handler_killstatus();
 
+#if defined(__SWITCH__)
+	porting::switchDebugTrace("ClientLauncher::run: entering menu-game loop");
+#endif
 	while (m_rendering_engine->run() && !*kill &&
 		!g_gamecallback->shutdown_requested) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("ClientLauncher::run: loop iteration begin");
+#endif
 		// Set the window caption
 		auto driver_name = m_rendering_engine->getVideoDriver()->getName();
 		std::string caption = std::string(PROJECT_NAME_C) +
@@ -207,25 +316,50 @@ bool ClientLauncher::run(GameStartData &start_data, const Settings &cmd_args)
 
 			bool should_run_game = launch_game(error_message, reconnect_requested,
 				start_data, cmd_args);
+#if defined(__SWITCH__)
+			porting::switchDebugTrace(should_run_game ?
+				"ClientLauncher::run: launch_game requested game" :
+				"ClientLauncher::run: launch_game returned false");
+#endif
 
 			// Reset the reconnect_requested flag
 			reconnect_requested = false;
 
 			// If skip_main_menu, we only want to startup once
-			if (skip_main_menu && !first_loop)
+			if (skip_main_menu && !first_loop) {
+#if defined(__SWITCH__)
+				porting::switchDebugTrace("ClientLauncher::run: breaking after skip_main_menu repeat");
+#endif
 				break;
+			}
 			first_loop = false;
 
 			if (!should_run_game) {
-				if (skip_main_menu)
+				if (skip_main_menu) {
+#if defined(__SWITCH__)
+					porting::switchDebugTrace("ClientLauncher::run: breaking after skip_main_menu false launch");
+#endif
 					break;
+#if defined(__SWITCH__)
+				}
+				porting::switchDebugTrace("ClientLauncher::run: returning to main menu");
+#else
+				}
+#endif
 				continue;
 			}
 
 			// Break out of menu-game loop to shut down cleanly
-			if (!m_rendering_engine->run() || *kill)
+			if (!m_rendering_engine->run() || *kill) {
+#if defined(__SWITCH__)
+				porting::switchDebugTrace("ClientLauncher::run: rendering stopped before game");
+#endif
 				break;
+			}
 
+#if defined(__SWITCH__)
+			porting::switchDebugTrace("ClientLauncher::run: starting game");
+#endif
 			the_game(
 				kill,
 				input,
@@ -235,11 +369,42 @@ bool ClientLauncher::run(GameStartData &start_data, const Settings &cmd_args)
 				chat_backend,
 				&reconnect_requested
 			);
+#if defined(__SWITCH__)
+			porting::switchDebugTrace("ClientLauncher::run: game returned");
+#endif
+#if LOCKDOWN_CLIENT
+			if (reconnect_requested) {
+				const std::string saved_name = getNormalizedLockdownName();
+				const std::string saved_password = g_settings->get("lockdown_password");
+				lockdown_auto_connect_once =
+					is_valid_player_name(saved_name) && !saved_password.empty();
+				if (lockdown_auto_connect_once) {
+					start_data.name = saved_name;
+					start_data.password = saved_password;
+					error_message.clear();
+				}
+#if defined(__SWITCH__)
+				{
+					char message[160];
+					std::snprintf(message, sizeof(message),
+						"lockdown reconnect: enabled=%d saved_name=%d valid_name=%d saved_password=%d",
+						lockdown_auto_connect_once ? 1 : 0,
+						saved_name.empty() ? 0 : 1,
+						is_valid_player_name(saved_name) ? 1 : 0,
+						saved_password.empty() ? 0 : 1);
+					porting::switchDebugTrace(message);
+				}
+#endif
+			}
+#endif
 #ifdef NDEBUG
 		} catch (std::exception &e) {
 			error_message = "Some exception: ";
 			error_message.append(debug_describe_exc(e));
 			errorstream << error_message << std::endl;
+#if defined(__SWITCH__)
+			porting::switchDebugTrace("ClientLauncher::run: caught exception");
+#endif
 		}
 #endif
 
@@ -273,6 +438,11 @@ bool ClientLauncher::run(GameStartData &start_data, const Settings &cmd_args)
 		g_profiler->clear();
 	}
 
+#if defined(__SWITCH__)
+	porting::switchDebugTrace(retval ?
+		"ClientLauncher::run: returning true" :
+		"ClientLauncher::run: returning false");
+#endif
 	return retval;
 }
 
@@ -306,6 +476,39 @@ void ClientLauncher::init_args(GameStartData &start_data, const Settings &cmd_ar
 
 	random_input = g_settings->getBool("random_input")
 			|| cmd_args.getFlag("random-input");
+
+	applyLockdownServer(start_data);
+#if LOCKDOWN_CLIENT
+	if (!skip_main_menu) {
+		std::string raw_saved_name;
+		if (!g_settings->getNoEx("lockdown_playername", raw_saved_name) ||
+				raw_saved_name.empty())
+			raw_saved_name = g_settings->get("name");
+		const std::string saved_name(trim(raw_saved_name));
+		const std::string saved_password = g_settings->get("lockdown_password");
+		if (saved_name != raw_saved_name)
+			saveLockdownCredentials(saved_name, saved_password);
+		lockdown_auto_connect_once =
+			is_valid_player_name(saved_name) && !saved_password.empty();
+		if (lockdown_auto_connect_once) {
+			start_data.name = saved_name;
+			start_data.password = saved_password;
+		}
+#if defined(__SWITCH__)
+		{
+			char message[192];
+			std::snprintf(message, sizeof(message),
+				"lockdown auto-connect: enabled=%d saved_name=%d valid_name=%d saved_password=%d raw_len=%zu trimmed_len=%zu",
+				lockdown_auto_connect_once ? 1 : 0,
+				saved_name.empty() ? 0 : 1,
+				is_valid_player_name(saved_name) ? 1 : 0,
+				saved_password.empty() ? 0 : 1,
+				raw_saved_name.size(), saved_name.size());
+			porting::switchDebugTrace(message);
+		}
+#endif
+	}
+#endif
 }
 
 void ClientLauncher::init_engine()
@@ -380,6 +583,12 @@ void ClientLauncher::config_guienv()
 
 	float density = rangelim(g_settings->getFloat("gui_scaling"), 0.5f, 20) *
 		RenderingEngine::getDisplayDensity();
+#if defined(__SWITCH__)
+	char density_message[96];
+	std::snprintf(density_message, sizeof(density_message),
+		"ClientLauncher::config_guienv: density %.2f", density);
+	porting::switchDebugTrace(density_message);
+#endif
 	skin->setScale(density);
 	skin->setSize(gui::EGDS_CHECK_BOX_WIDTH, (s32)(17.0f * density));
 	skin->setSize(gui::EGDS_SCROLLBAR_SIZE, (s32)(21.0f * density));
@@ -422,6 +631,17 @@ bool ClientLauncher::launch_game(std::string &error_message,
 		bool reconnect_requested, GameStartData &start_data,
 		const Settings &cmd_args)
 {
+#if defined(__SWITCH__)
+	volatile auto *kill = porting::signal_handler_killstatus();
+	while (!porting::switchIsForeground() && !*kill) {
+		porting::switchDebugTrace(
+			"ClientLauncher::launch_game: waiting for foreground");
+		if (!m_rendering_engine->run())
+			return false;
+		sleep_ms(100);
+	}
+#endif
+
 	// Prepare and check the start data to launch a game
 	std::string error_message_lua = error_message;
 	error_message.clear();
@@ -446,10 +666,17 @@ bool ClientLauncher::launch_game(std::string &error_message,
 	 * Show the GUI menu
 	 */
 	std::string server_name, server_description;
-	if (!skip_main_menu) {
+	const bool show_main_menu = !skip_main_menu && !lockdown_auto_connect_once;
+	if (show_main_menu) {
 		// Initialize menu data
 		// TODO: Re-use existing structs (GameStartData)
 		MainMenuData menudata;
+#if LOCKDOWN_CLIENT
+		start_data.name = getNormalizedLockdownName();
+		start_data.password = g_settings->get("lockdown_password");
+		start_data.address = LOCKDOWN_SERVER_NAME;
+		start_data.socket_port = LOCKDOWN_SERVER_PORT;
+#endif
 		menudata.address                         = start_data.address;
 		menudata.name                            = start_data.name;
 		menudata.password                        = start_data.password;
@@ -458,6 +685,17 @@ bool ClientLauncher::launch_game(std::string &error_message,
 		menudata.script_data.reconnect_requested = reconnect_requested;
 
 		main_menu(&menudata);
+#if defined(__SWITCH__)
+		{
+			char message[192];
+			std::snprintf(message, sizeof(message),
+				"ClientLauncher::launch_game: menu returned address='%s' port='%s' name='%s' password=%s len=%zu mode=%d",
+				menudata.address.c_str(), menudata.port.c_str(), menudata.name.c_str(),
+				menudata.password.empty() ? "empty" : "set", menudata.password.size(),
+				static_cast<int>(menudata.allow_login_or_register));
+			porting::switchDebugTrace(message);
+		}
+#endif
 
 		// Skip further loading if there was an exit signal.
 		if (!m_rendering_engine->run() || *porting::signal_handler_killstatus())
@@ -468,6 +706,9 @@ bool ClientLauncher::launch_game(std::string &error_message,
 			 * next iteration (if any) causing it to be displayed by the GUI
 			 */
 			error_message = menudata.script_data.errormessage;
+#if defined(__SWITCH__)
+			porting::switchDebugTrace("ClientLauncher::launch_game: menu error message returned");
+#endif
 			return false;
 		}
 
@@ -498,6 +739,26 @@ bool ClientLauncher::launch_game(std::string &error_message,
 			start_data.address.empty() && !start_data.name.empty();
 	}
 
+	if (lockdown_auto_connect_once) {
+#if defined(__SWITCH__)
+		porting::switchDebugTrace("ClientLauncher::launch_game: using lockdown auto-connect");
+#endif
+		lockdown_auto_connect_once = false;
+	}
+
+	applyLockdownServer(start_data);
+#if defined(__SWITCH__)
+	{
+		char message[192];
+		std::snprintf(message, sizeof(message),
+			"ClientLauncher::launch_game: final start address='%s' port=%u name='%s' password=%s len=%zu mode=%d",
+			start_data.address.c_str(), start_data.socket_port, start_data.name.c_str(),
+			start_data.password.empty() ? "empty" : "set", start_data.password.size(),
+			static_cast<int>(start_data.allow_login_or_register));
+		porting::switchDebugTrace(message);
+	}
+#endif
+
 	if (!start_data.isSinglePlayer() && start_data.name.empty()) {
 		error_message = gettext("Please choose a name!");
 		errorstream << error_message << std::endl;
@@ -510,15 +771,33 @@ bool ClientLauncher::launch_game(std::string &error_message,
 		start_data.password = "";
 		start_data.socket_port = myrand_range(49152, 65535);
 	} else {
+#if LOCKDOWN_CLIENT
+		start_data.name = trim(start_data.name);
+#else
 		g_settings->set("name", start_data.name);
+#endif
 	}
 
 	if (start_data.name.length() > PLAYERNAME_SIZE - 1) {
 		error_message = gettext("Player name too long.");
+#if !LOCKDOWN_CLIENT
 		start_data.name.resize(PLAYERNAME_SIZE);
 		g_settings->set("name", start_data.name);
+#endif
 		return false;
 	}
+
+#if LOCKDOWN_CLIENT
+	if (!start_data.isSinglePlayer()) {
+		if (!is_valid_player_name(start_data.name)) {
+			error_message = gettext("Player name contains disallowed characters");
+			errorstream << error_message << std::endl;
+			return false;
+		}
+
+		saveLockdownCredentials(start_data.name, start_data.password);
+	}
+#endif
 
 	// For singleplayer and local server
 	if (start_data.address.empty()) {

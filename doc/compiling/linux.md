@@ -86,6 +86,14 @@ Build a version that runs directly from the source directory:
     cmake . -DRUN_IN_PLACE=TRUE
     make -j$(nproc)
 
+Build a client locked to one private server:
+
+    cmake . -DRUN_IN_PLACE=TRUE \
+        -DLOCKDOWN_CLIENT=TRUE \
+        -DLOCKDOWN_SERVER_NAME=play.example.net \
+        -DLOCKDOWN_SERVER_PORT=30000
+    make -j$(nproc)
+
 Run it:
 
     ./bin/luanti
